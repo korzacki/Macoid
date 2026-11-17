@@ -2,9 +2,13 @@ name: macoid
 on:
   push:
     branches: ["job-**"]
+permissions:
+  contents: write
 jobs:
   run:
     runs-on: __RUNNER__
+    env:
+      GH_TOKEN: ${{ github.token }}
     steps:
       - uses: actions/checkout@v4
       - name: Run command

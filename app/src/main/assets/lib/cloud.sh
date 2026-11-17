@@ -28,6 +28,14 @@ cloud_submit() {
     echo "[macoid] creating private scratch repo $_repo (used only to run your jobs)" >&2
     gh repo create macoid-cloud --private -d "Macoid cloud runner scratch repo" >/dev/null || return 1
   fi
+  # the scratch repo receives your project files and cached installs, so it must never be public
+  _priv=$(gh api "repos/$_repo" -q .private 2>/dev/null)
+  if [ "$_priv" = false ] && [ "${MACOID_ALLOW_PUBLIC:-0}" != 1 ]; then
+    echo "macoid: $_repo is PUBLIC - Macoid uploads your files and cached installs there, so it stopped." >&2
+    echo "        Make it private (github.com/$_repo/settings -> Danger Zone -> Change visibility) or delete it (Macoid recreates it private)." >&2
+    echo "        Override at your own risk: export MACOID_ALLOW_PUBLIC=1" >&2
+    return 1
+  fi
   _br="job-$(date +%s)"
   ( cd "$_snap" && rm -rf .git && git init -q && git config user.name macoid && git config user.email macoid@users.noreply.github.com \
     && git add -A && git commit -q -m "macoid job $_br" && git remote add origin "https://github.com/$_repo.git" \
@@ -59,25 +67,20 @@ for __d in "$HOME/.local/bin" "$HOME/.cargo/bin" "$HOME/go/bin" "$(npm prefix -g
 done
 export PATH
 __bins() { for __x in $(printf '%s' "$PATH" | tr ':' ' '); do [ -d "$__x" ] && ls -1 "$__x" 2>/dev/null; done | sort -u; }
-if [ "$__rec" = 0 ] && [ -f .macoid/installs.tsv ]; then
-  while IFS='|' read -r __e __b __c; do
-    [ -n "$__c" ] || continue
-    __hit=0
-    case " $__eco " in *" $__e "*) __hit=1;; esac
-    if [ -n "$__tool" ]; then case " $__b " in *" $__tool "*) __hit=1;; esac; fi
-    if [ $__hit = 1 ]; then
-      eval "$__c" </dev/null >/dev/null 2>&1 || echo "[macoid] could not re-apply saved install: $__c" >&2
-    fi
-  done < .macoid/installs.tsv
+. .macoid/runner-env.sh 2>/dev/null
+__apply_saved
+if [ -n "$__rec" ]; then
+  __bins > "${RUNNER_TEMP:-/tmp}/bins0"
+  __marker="${RUNNER_TEMP:-/tmp}/envmarker"; sleep 1; touch "$__marker"; sleep 1
 fi
-[ "$__rec" = 1 ] && __bins > "${RUNNER_TEMP:-/tmp}/bins0"
 PRE
 }
 _cloud_post() {
   cat <<'POST'
-if [ "$__rec" = 1 ]; then
+if [ -n "$__rec" ]; then
   __bins > "${RUNNER_TEMP:-/tmp}/bins1"
   printf '%s\n' "MACOID""-NEWBIN: $(comm -13 "${RUNNER_TEMP:-/tmp}/bins0" "${RUNNER_TEMP:-/tmp}/bins1" | tr '\n' ' ')"
+  [ "$__rc" = 0 ] && { __env_save "$__rec" "$__marker" || echo "[macoid] could not cache the environment (installs will be replayed instead)" >&2; }
 fi
 exit $__rc
 POST
@@ -110,6 +113,7 @@ cloud_cmd() {
       return 0
     fi
     _rec=$(install_eco "$@")
+    [ -n "$_rec" ] && _eco=$_rec   # load the saved environment first, then install on top of it
     _line=""
     for _a in "$@"; do _q=$(printf '%s' "$_a" | sed "s/'/'\\\\''/g"); _line="$_line '$_q'"; done
   fi
@@ -118,10 +122,11 @@ cloud_cmd() {
   _snap="$TMPDIR/cloud.$$"; rm -rf "$_snap"; mkdir -p "$_snap/.macoid" "$_snap/.github/workflows"
   cloud_snapshot "$_snap" || return 1
   [ -f "$INST_FILE" ] && cp "$INST_FILE" "$_snap/.macoid/installs.tsv"
+  cp "$MACOID/lib/runner-env.sh" "$_snap/.macoid/runner-env.sh"
   _qt=$(printf '%s' "$_tool" | sed "s/'/'\\\\''/g")
   {
     printf "__tool='%s'\n__eco='%s'\n" "$_qt" "$_eco"
-    if [ -n "$_rec" ]; then echo "__rec=1"; else echo "__rec=0"; fi
+    printf "__rec='%s'\n" "$_rec"
     _cloud_pre
     printf '%s\n' "$_line"
     echo '__rc=$?'
