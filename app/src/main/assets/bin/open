@@ -1,0 +1,55 @@
+. "$MACOID/lib/common.sh"
+app=""
+while [ $# -gt 0 ]; do
+  case "$1" in
+    -a) app=$2; shift 2;;
+    -b) app=$2; shift 2;;
+    -e|-t|-f) echo "open: use 'nano <file>' to edit files" >&2; exit 1;;
+    -R|-n|-g|-j|-h|-W|-F|-u) shift;;
+    --args) break;;
+    *) break;;
+  esac
+done
+go() { am start "$@" >/dev/null 2>&1 && return 0; echo "open: could not launch ${app:-$target}" >&2; return 1; }
+target=$1
+if [ -n "$app" ]; then
+  lc=$(echo "$app" | tr 'A-Z' 'a-z' | sed 's/\.app$//')
+  case "$lc" in
+    safari|chrome|"google chrome"|firefox|browser|edge|brave) go -a android.intent.action.VIEW -d "${target:-https://www.google.com}";;
+    settings|"system settings"|"system preferences") go -a android.settings.SETTINGS;;
+    wifi|wi-fi) go -a android.settings.WIFI_SETTINGS;;
+    bluetooth) go -a android.settings.BLUETOOTH_SETTINGS;;
+    camera|photo*booth) go -a android.media.action.STILL_IMAGE_CAMERA;;
+    mail) go -a android.intent.action.SENDTO -d "mailto:${target}";;
+    messages) go -a android.intent.action.SENDTO -d "sms:${target}";;
+    phone|facetime) go -a android.intent.action.DIAL -d "tel:${target}";;
+    maps) go -a android.intent.action.VIEW -d "geo:0,0?q=${target:-}";;
+    calendar) go -a android.intent.action.MAIN -c android.intent.category.APP_CALENDAR;;
+    calculator) go -a android.intent.action.MAIN -c android.intent.category.APP_CALCULATOR;;
+    contacts) go -a android.intent.action.VIEW -d content://contacts/people;;
+    music) go -a android.intent.action.MAIN -c android.intent.category.APP_MUSIC;;
+    photos|gallery) go -a android.intent.action.MAIN -c android.intent.category.APP_GALLERY;;
+    clock) go -a android.intent.action.SHOW_ALARMS;;
+    finder|files) go -n com.android.documentsui/.files.FilesActivity || go -a android.intent.action.GET_CONTENT -t '*/*';;
+    "app store"|appstore) go -a android.intent.action.VIEW -d "market://search?q=${target:-}";;
+    terminal|macoid) echo "Macoid is already running.";;
+    *) monkey -p "$app" -c android.intent.category.LAUNCHER 1 >/dev/null 2>&1 && exit 0
+       echo "The file $app does not exist. (use the Android package name, e.g. open -a com.whatsapp)" >&2; exit 1;;
+  esac
+  exit $?
+fi
+[ -z "$target" ] && { echo "usage: open [-a application] <url|file|directory>" >&2; exit 1; }
+case "$target" in
+  *://*|mailto:*|tel:*|sms:*|geo:*) go -a android.intent.action.VIEW -d "$target"; exit $?;;
+esac
+if [ -d "$target" ]; then ls -la "$target"; exit 0; fi
+if [ -f "$target" ]; then
+  f=$(realpath "$target")
+  case "$f" in
+    /sdcard/*|/storage/*|*/home/storage/*)
+      case "$f" in *.jpg|*.jpeg) m=image/jpeg;; *.png) m=image/png;; *.gif) m=image/gif;; *.pdf) m=application/pdf;; *.mp4) m=video/mp4;; *.mp3) m=audio/mpeg;; *.txt|*.md|*.log) m=text/plain;; *.html) m=text/html;; *.apk) m=application/vnd.android.package-archive;; *) m='*/*';; esac
+      go -a android.intent.action.VIEW -d "file://$f" -t "$m"; exit $?;;
+    *) echo "open: other apps cannot read Macoid's private files. Copy it to ~/storage first (cp $target ~/storage/Download/), or view it with: cat $target" >&2; exit 1;;
+  esac
+fi
+echo "The file $target does not exist." >&2; exit 1

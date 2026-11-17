@@ -1,0 +1,8 @@
+case "$1" in
+  -listallhardwareports) for i in /sys/class/net/*; do n=${i##*/}; case "$n" in lo) continue;; esac; echo "Hardware Port: $n"; echo "Device: $n"; echo "Ethernet Address: $(cat $i/address 2>/dev/null)"; echo; done;;
+  -listallnetworkservices) echo "An asterisk (*) denotes that a network service is disabled."; ls /sys/class/net | grep -v '^lo$';;
+  -getdnsservers) getprop net.dns1; getprop net.dns2;;
+  -getinfo) ip -4 -o addr show 2>/dev/null | grep -v ' lo ' | sed 's/.*inet \([0-9.]*\)\/.*/IP address: \1/';;
+  -getairportnetwork) echo "Current Wi-Fi Network: (not available to apps on Android)";;
+  *) echo "usage: networksetup -listallhardwareports | -listallnetworkservices | -getdnsservers | -getinfo" >&2; exit 1;;
+esac

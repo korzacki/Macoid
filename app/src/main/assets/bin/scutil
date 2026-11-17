@@ -1,0 +1,7 @@
+. "$MACOID/lib/common.sh"
+case "$1 $2" in
+  "--get ComputerName") prop ro.product.model;;
+  "--get HostName"|"--get LocalHostName") hostname 2>/dev/null || prop net.hostname;;
+  "--dns"*) echo "DNS configuration"; echo "  nameserver[0] : $(prop net.dns1)"; echo "  nameserver[1] : $(prop net.dns2)";;
+  *) echo "usage: scutil --get ComputerName|HostName|LocalHostName | --dns" >&2; exit 1;;
+esac

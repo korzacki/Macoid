@@ -1,0 +1,28 @@
+. "$MACOID/lib/common.sh"
+CAT="$MACOID/lib/maccmds.txt"; EXTRA="$MACOID/lib/maccmds.extra"
+names() { cat "$CAT" $EXTRA 2>/dev/null | grep -v '^#' | tr -s ' ' '\n' | grep -E '^[A-Za-z0-9_+.-]+$' | sort -u; }
+case "$1" in
+  --version|-v) echo "Homebrew 4.2.0 (Macoid)"; echo "Homebrew/cloud: every catalog command runs on a real macOS runner";;
+  list|ls) ls "$MACOID/bin" "$HOME/.local/bin" 2>/dev/null | grep -v ':' | sort -u;;
+  search) [ -z "$2" ] && die "usage: brew search <text>"; names | grep -i -- "$2";;
+  info) [ -z "$2" ] && die "usage: brew info <name>"
+        if [ -f "$MACOID/bin/$2" ]; then echo "$2: built into Macoid (runs locally)"
+        elif names | grep -qx -- "$2"; then echo "$2: macOS command, runs on a real Mac via the cloud runner"
+        else echo "$2: not in the Macoid catalog"; fi;;
+  install|reinstall)
+    shift; [ $# -eq 0 ] && die "usage: brew install <name | https://url/script.sh>"
+    for p in "$@"; do
+      case "$p" in
+        http://*|https://*) n=$(basename "$p" | sed 's/\.sh$//'); mkdir -p "$HOME/.local/bin"
+          /system/bin/sh "$MACOID/bin/wget" -q -O "$HOME/.local/bin/$n" "$p" || die "brew: download failed"
+          chmod +x "$HOME/.local/bin/$n"; echo "==> Installed script '$n' (restart the shell with ^C to use it)";;
+        *) if [ -f "$MACOID/bin/$p" ]; then echo "$p: already built into Macoid"
+           elif names | grep -qx -- "$p"; then echo "$p: nothing to install - it runs on a real Mac in the cloud when you call it"
+           else echo "Error: No available formula with the name \"$p\". Try a script URL: brew install https://.../tool.sh" >&2; fi;;
+      esac
+    done;;
+  uninstall|remove) shift; for p in "$@"; do rm -f "$HOME/.local/bin/$p" && echo "Uninstalled $p"; done;;
+  update|upgrade|cleanup|doctor) echo "Your system is ready to brew.";;
+  "") echo "usage: brew [--version|list|search|info|install|uninstall]";;
+  *) echo "brew: '$1' is not supported in Macoid" >&2; exit 1;;
+esac

@@ -1,0 +1,2 @@
+. "$MACOID/lib/common.sh"
+bridge macoid.NOTIFY --es title "${2:-Macoid}" --es text "$1"

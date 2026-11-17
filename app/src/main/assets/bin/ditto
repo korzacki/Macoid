@@ -1,0 +1,8 @@
+case "$1" in
+  -c) shift; keep=""; [ "$1" = -k ] && shift; [ "$1" = --keepParent ] && shift; src=$1; out=$2
+      case "$out" in *.zip) ;; *) out="$out.zip";; esac
+      if [ -d "$src" ]; then parent=$(dirname "$src"); b=$(basename "$src"); ( cd "$parent" && zip -r "$OLDPWD/$out" "$b" ) >/dev/null 2>&1 || ( cd "$parent" && zip -r "$out" "$b" ); else zip "$out" "$src"; fi;;
+  -x) shift; [ "$1" = -k ] && shift; unzip -d "${2:-.}" "$1";;
+  -*) shift; exec cp -R "$@";;
+  *) cp -R "$@";;
+esac

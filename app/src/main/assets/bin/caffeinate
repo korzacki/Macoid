@@ -1,0 +1,3 @@
+# Runs a command (or just waits). Android cannot be held awake from a plain shell, so no sleep assertion is taken.
+t=""; while [ $# -gt 0 ]; do case "$1" in -t) t=$2; shift 2;; -[dimsu]) shift;; -w) shift 2;; *) break;; esac; done
+if [ $# -gt 0 ]; then "$@"; else sleep "${t:-3600}"; fi

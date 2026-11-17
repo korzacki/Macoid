@@ -1,0 +1,5 @@
+dirs="$HOME /sdcard"; name=""; q=""
+while [ $# -gt 0 ]; do case "$1" in -onlyin) dirs=$2; shift 2;; -name) name=$2; shift 2;; -*) shift;; *) q="$q $1"; shift;; esac; done
+pat=${name:-$(echo $q | sed 's/kMDItemFSName *== *"\{0,1\}\([^"]*\)"\{0,1\}.*/\1/')}
+[ -z "$pat" ] && { echo "usage: mdfind [-onlyin dir] [-name name] query" >&2; exit 1; }
+for d in $dirs; do [ -d "$d" ] && find "$d" -iname "*$pat*" 2>/dev/null; done

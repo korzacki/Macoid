@@ -1,0 +1,7 @@
+d=${1:-.}; [ -d "$d" ] || { echo "$d [error opening dir]" >&2; exit 1; }
+echo "$d"
+find "$d" -mindepth 1 -not -path '*/.git/*' 2>/dev/null | sort | while read p; do
+  rel=${p#$d/}; depth=$(printf '%s' "$rel" | tr -cd '/' | wc -c)
+  i=""; n=0; while [ $n -lt $depth ]; do i="$i│   "; n=$((n+1)); done
+  echo "$i├── ${rel##*/}"
+done

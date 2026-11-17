@@ -1,0 +1,24 @@
+. "$MACOID/lib/common.sh"
+[ "$1" = -l ] && die "osascript: only AppleScript one-liners (-e) are supported; JavaScript (-l) is not."
+script=""
+while [ $# -gt 0 ]; do case "$1" in -e) script="$script
+$2"; shift 2;; -s|-i) shift;; *) [ -f "$1" ] && script=$(cat "$1"); shift;; esac; done
+[ -z "$script" ] && die "usage: osascript -e 'display notification \"hi\" with title \"Macoid\"'"
+first() { printf '%s' "$1" | sed -n 's/^[^"]*"\([^"]*\)".*/\1/p'; }   # first quoted string
+echo "$script" | while IFS= read -r line; do
+  l=$(printf '%s' "$line" | sed 's/^[ 	]*//')
+  case "$l" in
+    "") ;;
+    "display notification"*) t=$(first "$l"); title=$(printf '%s' "$l" | sed -n 's/.*with title "\([^"]*\)".*/\1/p'); bridge macoid.NOTIFY --es title "${title:-Script Editor}" --es text "$t";;
+    "display dialog"*|"display alert"*) t=$(first "$l"); echo "$t"; bridge macoid.NOTIFY --es title Dialog --es text "$t"; echo "button returned:OK";;
+    "say "*) t=$(first "$l"); bridge macoid.SAY --es text "$t";;
+    beep*) bridge macoid.VIBRATE;;
+    "do shell script"*) c=$(first "$l"); sh -c "$c";;
+    "tell application "*activate*|"tell application "*launch*|"tell application "*"to open"*) a=$(first "$l"); open -a "$a";;
+    "the clipboard"|"get the clipboard"|"return the clipboard") pbpaste; echo;;
+    "set the clipboard to "*) t=$(first "$l"); printf '%s' "$t" | pbcopy;;
+    "current date"|"get current date") date '+%A, %B %d, %Y at %I:%M:%S %p';;
+    "return "*|"log "*) first "$l" | sed 's/^$//'; echo;;
+    *) echo "osascript: unsupported statement: $l" >&2;;
+  esac
+done

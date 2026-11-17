@@ -1,0 +1,51 @@
+. "$MACOID/lib/common.sh"
+sub=$1; [ $# -gt 0 ] && shift
+count() { cat "$MACOID/lib/maccmds.txt" "$MACOID/lib/maccmds.extra" 2>/dev/null | grep -v '^#' | tr -s ' ' '\n' | grep -E '^[A-Za-z0-9_+.-]+$' | sort -u | wc -l; }
+case "$sub" in
+  motd) echo "Welcome to Macoid $MACOID_VERSION - a macOS-style terminal for Android."
+        echo "Type 'macoid help' for commands. Real git/gh built in; other Mac commands run on a real Mac in the cloud.";;
+  version|--version) echo "Macoid $MACOID_VERSION";;
+  cloud) . "$MACOID/lib/cloud.sh"; cloud_cmd "$@";;
+  build) . "$MACOID/lib/cloud.sh"; build_cmd "$@";;
+  commands|list)
+    echo "Built in (run locally):"; ls "$MACOID/bin" "$HOME/.local/bin" 2>/dev/null | grep -v ':' | sort -u | tr '\n' ' '; echo; echo
+    echo "macOS catalog (run on a real Mac in the cloud): $(count) names - see 'brew search <text>'";;
+  sync-commands)
+    echo "[macoid] asking a real Mac for its full command list..." >&2
+    d="$TMPDIR/sync.$$"; mkdir -p "$d"; ( cd "$d" && sh "$MACOID/bin/macoid" cloud --os macos --fetch --sh 'ls /bin /sbin /usr/bin /usr/sbin /usr/local/bin /opt/homebrew/bin 2>/dev/null | grep -E "^[A-Za-z0-9_+.-]+$" | sort -u > maccmds-synced.txt; wc -l maccmds-synced.txt' )
+    if [ -s "$d/maccmds-synced.txt" ]; then
+      { echo "# synced $(date +%F)"; tr '\n' ' ' < "$d/maccmds-synced.txt"; echo; } > "$MACOID/lib/maccmds.extra"
+      echo "[macoid] catalog now has $(count) names. Restart the shell (^C) to load them." >&2
+    else echo "sync failed: no list came back" >&2; fi
+    rm -rf "$d";;
+  doctor)
+    echo "Macoid $MACOID_VERSION"
+    [ -f "$MACOID_APK" ] && echo "[ok] APK classpath: $MACOID_APK" || echo "[!!] APK not found"
+    git --version >/dev/null 2>&1 && echo "[ok] git (JGit) works" || echo "[!!] git failed (JVM tools unavailable)"
+    gh auth status >/dev/null 2>&1 && echo "[ok] GitHub login" || echo "[--] not logged in to GitHub (gh auth login)"
+    echo "[..] catalog size: $(count)";;
+  help|"")
+    cat <<'TXT'
+Macoid - macOS-style terminal for Android
+
+  git ...                 real git (clone, commit, push, pull, branch, merge, rebase, stash, tag ...)
+  gh auth login           log in to GitHub with a token, then:
+  gh repo|issue|pr|run|workflow|release|api ...
+  macoid build [target]   compile your project on GitHub Actions (android-apk, android-aab, ios, macos,
+                          swift, flutter-apk, gradle-java, maven, node, electron, python, go, rust,
+                          cmake, dotnet) and download the result into ./build-output
+  macoid cloud [--os macos|ubuntu|windows] [--fetch] -- <cmd...>   run any command on a real runner
+  macoid sync-commands    pull the real command list from a Mac (extends the catalog)
+  macoid commands|doctor|version
+
+macOS-style commands run locally: open pbcopy pbpaste say afplay osascript defaults sw_vers sysctl
+system_profiler scutil pmset ioreg vm_stat diskutil ifconfig networksetup launchctl mdfind mdls ditto
+trash tree md5 shasum uuidgen brew man softwareupdate xcode-select caffeinate zip unzip curl wget host dig
+
+Every other name in the macOS catalog (python, node, gcc, clang, swift, xcodebuild, make, cmake, cargo,
+go, ruby, awk, sed, rsync, plutil, codesign ...) runs on a real Mac in the cloud automatically.
+Editors: nano/vi/vim <file> open a built-in editor. setup-storage grants access to ~/storage.
+TXT
+    ;;
+  *) echo "macoid: unknown command '$sub'. Try: macoid help" >&2; exit 1;;
+esac

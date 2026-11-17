@@ -1,0 +1,36 @@
+. "$MACOID/lib/common.sh"
+val() {
+  case "$1" in
+    hw.model|hw.product) prop ro.product.model;;
+    hw.machine) case "$(uname -m)" in aarch64) echo arm64;; *) uname -m;; esac;;
+    hw.ncpu|hw.logicalcpu|hw.logicalcpu_max|hw.physicalcpu|hw.physicalcpu_max|hw.activecpu) ncpu;;
+    hw.memsize|hw.memsize_usable) echo $(( $(mem_kb MemTotal) * 1024 ));;
+    hw.pagesize|vm.pagesize) echo 4096;;
+    hw.cachelinesize) echo 64;;
+    hw.cpufrequency|hw.cpufrequency_max) echo $(( $(cat /sys/devices/system/cpu/cpu0/cpufreq/cpuinfo_max_freq 2>/dev/null || echo 0) * 1000 ));;
+    kern.ostype) echo Darwin;;
+    kern.osrelease) uname -r;;
+    kern.osproductversion) echo 14.0;;
+    kern.osversion) prop ro.build.id;;
+    kern.version) echo "Darwin Kernel Version 23.0.0 (Macoid emulation on Linux $(uname -r))";;
+    kern.hostname) hostname 2>/dev/null || prop net.hostname;;
+    kern.boottime) echo "{ sec = $(( $(date +%s) - $(cut -d. -f1 /proc/uptime) )), usec = 0 }";;
+    kern.maxproc) cat /proc/sys/kernel/pid_max 2>/dev/null;;
+    machdep.cpu.brand_string) grep -m1 -i 'model name\|Hardware' /proc/cpuinfo | cut -d: -f2 | sed 's/^ //' | grep . || prop ro.board.platform;;
+    machdep.cpu.core_count) ncpu;;
+    vm.swapusage) echo "total = $(( $(mem_kb SwapTotal) / 1024 )).00M  free = $(( $(mem_kb SwapFree) / 1024 )).00M";;
+    user.cs_path) echo "$PATH";;
+    *) return 1;;
+  esac
+}
+KEYS="hw.model hw.machine hw.ncpu hw.physicalcpu hw.logicalcpu hw.memsize hw.pagesize hw.cachelinesize hw.cpufrequency kern.ostype kern.osrelease kern.osproductversion kern.osversion kern.version kern.hostname kern.boottime kern.maxproc machdep.cpu.brand_string machdep.cpu.core_count vm.swapusage user.cs_path"
+n=0; all=0; names=""
+for a in "$@"; do case "$a" in -n) n=1;; -a|-A|-X) all=1;; -*) ;; *) names="$names $a";; esac; done
+[ $all = 1 ] && names=$KEYS
+[ -z "$names" ] && { echo "usage: sysctl [-n] [-a] name ..." >&2; exit 1; }
+rc=0
+for k in $names; do
+  v=$(val "$k") || { echo "sysctl: unknown oid '$k'" >&2; rc=1; continue; }
+  if [ $n = 1 ]; then echo "$v"; else echo "$k: $v"; fi
+done
+exit $rc

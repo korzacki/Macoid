@@ -1,0 +1,24 @@
+name: macoid
+on:
+  push:
+    branches: ["job-**"]
+jobs:
+  build:
+    strategy:
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - run: cargo build --release
+      - name: Collect binaries
+        shell: bash
+        run: |
+          mkdir -p out
+          find target/release -maxdepth 1 -type f \( -perm -u+x -o -name '*.exe' \) -exec cp {} out/ \;
+      - uses: actions/upload-artifact@v4
+        with:
+          name: rust-${{ matrix.os }}
+          path: out
+          if-no-files-found: ignore
+          retention-days: 3

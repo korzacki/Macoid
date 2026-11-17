@@ -1,0 +1,43 @@
+# Macoid init (sourced by the app's shell at startup)
+export MACOID_VERSION=2.0
+export PATH="$HOME/.local/bin:$PATH"
+mkdir -p "$HOME/.local/bin" "$HOME/.Trash" 2>/dev/null
+
+# 1) every script in $MACOID/bin becomes a command (functions dodge exec restrictions; names with - or . become aliases)
+for f in "$MACOID"/bin/*; do
+  n=${f##*/}
+  case "$n" in
+    *[-.]*) eval "alias '$n=/system/bin/sh $MACOID/bin/$n'";;
+    *) eval "$n() { /system/bin/sh \"$MACOID/bin/$n\" \"\$@\"; }";;
+  esac
+done
+
+# 2) user scripts in ~/.local/bin
+for f in "$HOME"/.local/bin/*; do
+  [ -f "$f" ] || continue
+  n=${f##*/}
+  case "$n" in *[-.]*) ;; *) eval "$n() { /system/bin/sh \"$f\" \"\$@\"; }";; esac
+done
+
+# 3) macOS command catalog: anything not available locally runs on a real macOS runner (GitHub Actions)
+for list in "$MACOID/lib/maccmds.txt" "$MACOID/lib/maccmds.extra"; do
+  [ -f "$list" ] || continue
+  for n in $(grep -v '^#' "$list" | tr -s ' ' '\n'); do
+    case "$n" in *[!A-Za-z0-9_+.-]*|'') continue;; esac
+    command -v "$n" >/dev/null 2>&1 || eval "alias '$n=/system/bin/sh $MACOID/lib/shim.sh $n'"
+  done
+done
+
+# 4) macOS-flavoured shell environment
+alias ll='ls -la'
+alias la='ls -A'
+alias l='ls -CF'
+alias neofetch='macfetch'
+alias less='cat'
+alias more='cat'
+alias top='top -b -n 1'
+alias vi='vim' ; alias nano='vim'
+sudo() { "$@"; }
+export USER=macoid LOGNAME=macoid SHELL=/system/bin/sh HOSTNAME=macoid
+export EDITOR=vim VISUAL=vim PAGER=cat
+cd "$HOME"
