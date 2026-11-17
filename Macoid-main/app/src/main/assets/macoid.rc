@@ -1,0 +1,103 @@
+# Macoid init (sourced by the app's shell at startup)
+export MACOID_VERSION=3.0
+export PATH="$HOME/.local/bin:$PATH"
+mkdir -p "$HOME/.local/bin" "$HOME/.Trash" 2>/dev/null
+
+# root session = uid 0 (started from the app's "#" button or with 'tsu')
+if [ "$(id -u 2>/dev/null)" = 0 ]; then export USER=root LOGNAME=root MACOID_ROOT=1; else export USER=macoid LOGNAME=macoid; fi
+
+# 1) every script in $MACOID/bin becomes a command (functions dodge exec restrictions; names with - or . become aliases)
+for f in "$MACOID"/bin/*; do
+  n=${f##*/}
+  case "$n" in
+    *[-.]*) eval "alias '$n=/system/bin/sh $MACOID/bin/$n'";;
+    *) eval "$n() { /system/bin/sh \"$MACOID/bin/$n\" \"\$@\"; }";;
+  esac
+done
+
+# 2) user scripts in ~/.local/bin
+for f in "$HOME"/.local/bin/*; do
+  [ -f "$f" ] || continue
+  n=${f##*/}
+  case "$n" in *[-.]*) ;; *) eval "$n() { /system/bin/sh \"$f\" \"\$@\"; }";; esac
+done
+
+# 2b) commands shipped by installed skills (~/.macoid/skills/<name>/bin)
+for d in "$HOME"/.macoid/skills/*/bin; do
+  [ -d "$d" ] || continue
+  for f in "$d"/*; do
+    [ -f "$f" ] || continue
+    n=${f##*/}
+    case "$n" in *[-.]*) eval "alias '$n=/system/bin/sh $f'";; *) eval "$n() { /system/bin/sh \"$f\" \"\$@\"; }";; esac
+  done
+done
+
+# 3) macOS command catalog: anything not available locally runs on a real macOS runner (GitHub Actions)
+for list in "$MACOID/lib/maccmds.txt" "$MACOID/lib/maccmds.extra"; do
+  [ -f "$list" ] || continue
+  for n in $(grep -v '^#' "$list" | tr -s ' ' '\n'); do
+    case "$n" in *[!A-Za-z0-9_+.-]*|'') continue;; esac
+    command -v "$n" >/dev/null 2>&1 || eval "alias '$n=/system/bin/sh $MACOID/lib/shim.sh $n'"
+  done
+done
+
+# 3b) commands added by saved cloud installs (pip/npm -g/gem/cargo/go/brew): run on the cloud, installs re-applied automatically
+if [ -f "$HOME/.macoid/cloudbins" ]; then
+  for n in $(cat "$HOME/.macoid/cloudbins"); do
+    case "$n" in *[!A-Za-z0-9_+.-]*|'') continue;; esac
+    command -v "$n" >/dev/null 2>&1 || eval "alias '$n=/system/bin/sh $MACOID/lib/shim.sh $n'"
+  done
+fi
+
+# 4) macOS-flavoured shell environment
+unalias vi vim nano pico less more top sudo 2>/dev/null
+alias ll='ls -la'
+alias la='ls -A'
+alias l='ls -CF'
+alias neofetch='macfetch'
+alias less='cat'
+alias more='cat'
+alias vi='edit' ; alias vim='edit' ; alias nano='edit' ; alias pico='edit'
+# sudo = run one command as root through su (needs a rooted phone); already root -> just run it
+sudo() { if [ "$(id -u)" = 0 ]; then "$@"; else /system/bin/sh "$MACOID/bin/sudo" "$@"; fi; }
+export SHELL=/system/bin/sh HOSTNAME=macoid
+export EDITOR=edit VISUAL=edit PAGER=cat
+export HISTFILE="$HOME/.mksh_history" HISTSIZE=2000
+set -o emacs 2>/dev/null
+if [ "$(id -u)" = 0 ]; then PS1='macoid(root):${PWD:-?} # '; else PS1='macoid:${PWD:-?} $ '; fi
+
+# 5) your own settings survive restarts: ~/.macoid/aliases.rc (written by 'alias') and ~/.macoid/user.rc (free-form, edit it yourself)
+mkdir -p "$HOME/.macoid" 2>/dev/null
+[ -f "$HOME/.macoid/aliases.rc" ] && . "$HOME/.macoid/aliases.rc"
+[ -f "$HOME/.macoid/user.rc" ] && . "$HOME/.macoid/user.rc"
+_macoid_alias_drop() {   # name -> remove its saved line
+  [ -f "$HOME/.macoid/aliases.rc" ] || return 0
+  : > "$HOME/.macoid/aliases.rc.new"
+  while IFS= read -r _l || [ -n "$_l" ]; do
+    case "$_l" in "alias '$1="*) ;; *) printf '%s\n' "$_l" >> "$HOME/.macoid/aliases.rc.new";; esac
+  done < "$HOME/.macoid/aliases.rc"
+  mv "$HOME/.macoid/aliases.rc.new" "$HOME/.macoid/aliases.rc"
+}
+_macoid_alias() {
+  if [ $# -eq 0 ]; then alias; return; fi
+  for _a in "$@"; do
+    case "$_a" in
+      -p) alias -p;;
+      *=*) alias "$_a" || continue
+           _n=${_a%%=*}; _q=$(printf '%s' "${_a#*=}" | sed "s/'/'\\\\''/g")
+           _macoid_alias_drop "$_n"
+           printf "alias '%s=%s'\n" "$_n" "$_q" >> "$HOME/.macoid/aliases.rc";;
+      *) alias "$_a";;
+    esac
+  done
+}
+_macoid_unalias() {
+  for _a in "$@"; do
+    case "$_a" in
+      -a) unalias -a; : > "$HOME/.macoid/aliases.rc";;
+      *) unalias "$_a" && _macoid_alias_drop "$_a";;
+    esac
+  done
+}
+alias unalias='_macoid_unalias'
+alias alias='_macoid_alias'

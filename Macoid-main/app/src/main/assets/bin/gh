@@ -1,0 +1,10 @@
+#!/system/bin/sh
+. "$MACOID/lib/common.sh"
+# keep the pasted token from being echoed on the terminal
+if [ "$1" = auth ] && [ "$2" = login ] && [ -t 0 ]; then
+  stty -echo 2>/dev/null
+  ( jvm gh "$@" ); rc=$?
+  stty echo 2>/dev/null; echo
+  exit $rc
+fi
+jvm gh "$@"
