@@ -6,8 +6,8 @@ android {
         applicationId = "com.macoid.terminal"
         minSdk = 26          // JGit needs java.nio.file (API 26+)
         targetSdk = 28       // allows exec from the app data dir (like Termux)
-        versionCode = 6
-        versionName = "3.3"
+        versionCode = 7
+        versionName = "3.4"
     }
     // Fixed signing key. Without it every GitHub Actions build is signed with a random debug key, Android refuses to
     // update the installed app ("conflicts with an existing package"), and uninstalling wipes everything installed in Macoid.

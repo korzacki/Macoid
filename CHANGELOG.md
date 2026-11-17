@@ -142,6 +142,24 @@ All notable changes to Macoid are documented here.
 - The cache is per ecosystem and grows with what you install. `macoid installs clear` forgets the local list; delete
   the `macoid-env` release in `<you>/macoid-cloud` to wipe the cached files.
 
+## [3.4] - 2026-11-18
+
+### Added
+- **Native, Termux-style package system.** `pkg install` downloads prebuilt `.deb` packages (apt + dpkg in `files/usr`) and
+  runs them directly on Android. Packages are built once, offline, by `tools/build-repo.sh` (hours, once); installs on the
+  phone take seconds and need no GitHub runner and no proot.
+- `NativeBoot` (Kotlin): downloads and unpacks `bootstrap-<arch>.zip` with SHA-256 check, SYMLINKS.txt handling and a
+  swap-in so a failed download never breaks an existing prefix.
+- `lib/native.sh`, `lib/native.conf`, `tools/build-repo.sh`.
+- First use of a known command (`python`, `node`, `go`, `clang`, `ssh`, `jq`, ...) installs its native package.
+
+### Changed
+- `pkg`, `apt`, `apt-get`, `brew install` try the native repo first and fall back to Alpine only for packages it lacks.
+- `$PREFIX/bin` is on `PATH`; native `curl wget unzip zip tree man host dig nslookup` replace the built-in stand-ins.
+
+### Notes
+- The native engine is off until `NAT_BASE_URL` points at a repo built with `tools/build-repo.sh`.
+
 ## [2.1] - 2026-11-17
 
 ### Fixed

@@ -1,7 +1,13 @@
-# Runs a command: first in the local Linux (fast, on the phone), and only macOS-only tools on a real Mac runner.
+# Runs a command: first natively (prebuilt packages), then in the local Linux (fast, on the phone), and only macOS-only tools on a real Mac runner.
 # Usage: shim.sh <command> [args]
 . "$MACOID/lib/common.sh"
 tool=$1; shift
+# Native (Termux-style) packages first: prebuilt, run straight on Android. Known tools install on first use.
+. "$MACOID/lib/native.sh"
+if [ "${MACOID_NATIVE:-1}" != 0 ]; then
+  if [ -x "$PREFIX/bin/$tool" ]; then exec "$PREFIX/bin/$tool" "$@"; fi
+  if nat_wanted && nat_ensure "$tool"; then exec "$PREFIX/bin/$tool" "$@"; fi
+fi
 case "$tool" in
   # hardware / OS specific: running these on a cloud VM would report the wrong machine
   kextstat|kmutil|kextload|kextunload|kextcache|csrutil|spctl|tccutil|bputil|fdesetup|firmwarepasswd|nvram|systemsetup|profiles|tmutil|airport|wdutil|powermetrics|sysdiagnose|spindump|purge|dscl|dscacheutil|dsconfigad|dsenableroot|dseditgroup|sysadminctl|pwpolicy|authorizationhost|vsdbutil|reboot|halt|shutdown|dmesg|fsck*|mount_*|newfs_*|asr|bless|hdik|iostat|nettop|sample|leaks|fs_usage)

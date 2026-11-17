@@ -1,5 +1,5 @@
 # Macoid init (sourced by the app's shell at startup)
-export MACOID_VERSION=3.3
+export MACOID_VERSION=3.4
 # On PATH: your scripts, then Android's own tools, then launchers for everything installed in the local Linux ($MACOID/linux/wrap)
 # and for skill / cloud-install commands (~/.macoid/xbin). New installs show up here at once, no restart needed.
 export PATH="$HOME/.local/bin:$PATH:$MACOID/linux/wrap:$HOME/.macoid/xbin"
@@ -13,6 +13,8 @@ if [ "$(id -u 2>/dev/null)" = 0 ]; then export USER=root LOGNAME=root MACOID_ROO
 # 1) every script in $MACOID/bin becomes a command (functions dodge exec restrictions; names with - or . become aliases)
 for f in "$MACOID"/bin/*; do
   n=${f##*/}
+  # a real native binary (Termux-style package) beats Macoid's built-in stand-in for these
+  case "$n" in curl|wget|unzip|zip|tree|man|host|dig|nslookup) [ -x "$PREFIX/bin/$n" ] && continue;; esac
   case "$n" in
     *[-.]*) eval "alias '$n=/system/bin/sh $MACOID/bin/$n'";;
     *) eval "$n() { /system/bin/sh \"$MACOID/bin/$n\" \"\$@\"; }";;

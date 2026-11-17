@@ -4,7 +4,7 @@ sub=$1; [ $# -gt 0 ] && shift
 count() { cat "$MACOID/lib/maccmds.txt" "$MACOID/lib/maccmds.extra" 2>/dev/null | grep -v '^#' | tr -s ' ' '\n' | grep -E '^[A-Za-z0-9_+.-]+$' | sort -u | wc -l; }
 case "$sub" in
   motd) echo "Welcome to Macoid $MACOID_VERSION - a macOS-style terminal for Android (real PTY terminal)."
-        echo "Type 'macoid help' for commands. Real git/gh built in; pip/npm/apk/brew install instantly on the phone (pkg help)."
+        echo "Type 'macoid help' for commands. Real git/gh built in; pkg install gives prebuilt native packages like Termux (pkg help)."
         echo "Rooted phone? Use the # button (root session), 'tsu' (root shell) or 'sudo <cmd>'.";;
   version|--version) echo "Macoid $MACOID_VERSION";;
   cloud) . "$MACOID/lib/cloud.sh"; cloud_cmd "$@";;
@@ -50,6 +50,10 @@ case "$sub" in
     git --version >/dev/null 2>&1 && echo "[ok] git (JGit) works" || echo "[!!] git failed (JVM tools unavailable)"
     gh auth status >/dev/null 2>&1 && echo "[ok] GitHub login" || echo "[--] not logged in to GitHub (gh auth login)"
     . "$MACOID/lib/root.sh"; _su=$(root_su) && echo "[ok] su found: $_su (macoid root status to test)" || echo "[--] no su: not rooted (root features disabled)"
+    . "$MACOID/lib/native.sh"
+    if nat_ready; then echo "[ok] native packages ready (prefix $PREFIX)"
+    elif [ -n "$NAT_BASE_URL" ]; then echo "[--] native packages: first pkg install downloads the bootstrap from $NAT_BASE_URL"
+    else echo "[--] native packages: no repo configured (lib/native.conf) - Alpine fallback only"; fi
     . "$MACOID/lib/linux.sh"
     if lx_ready; then echo "[ok] local Linux (Alpine) ready - pkg/pip/npm/apk install instantly"
     elif [ -x "$LXPROOT" ]; then echo "[--] Linux engine downloaded, Alpine not unpacked yet (run: pkg setup)"

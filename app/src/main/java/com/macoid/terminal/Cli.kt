@@ -18,6 +18,7 @@ object Cli {
                 "dns" -> HttpCmd.dns(rest)
                 "unzip" -> ZipCmd.unzip(rest)
                 "zip" -> ZipCmd.zip(rest)
+                "bootstrap" -> NativeBoot.run(rest)
                 else -> { System.err.println("macoid: unknown tool '${args.firstOrNull()}'"); 127 }
             }
         } catch (e: Throwable) {

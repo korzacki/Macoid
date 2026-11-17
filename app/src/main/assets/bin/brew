@@ -8,7 +8,14 @@ names() { cat "$CAT" $EXTRA 2>/dev/null | grep -v '^#' | tr -s ' ' '\n' | grep -
 #   returns 0 = installed, 1 = no such package in Alpine, 2 = real error (no internet, engine will not start ...)
 brew_local() {
   . "$MACOID/lib/linux.sh"
-  _n=${1%%@*}; _pk=$(lx_pkgs "$_n"); [ -n "$_pk" ] || _pk=$_n
+  _n=${1%%@*}
+  . "$MACOID/lib/native.sh"
+  if nat_wanted; then
+    echo "==> Installing $_n (native package)" >&2
+    nat_install "$_n" && [ -z "$NAT_MISS" ] && { echo "==> $_n: installed and saved on this phone. It is ready to use now." >&2; return 0; }
+    [ -n "$NAT_MISS" ] && echo "==> $_n is not in the native repo, trying Alpine" >&2
+  fi
+  _pk=$(lx_pkgs "$_n"); [ -n "$_pk" ] || _pk=$_n
   lx_setup || return 2
   echo "==> Installing $_n (local, apk)" >&2
   if lx_apk_add $_pk; then

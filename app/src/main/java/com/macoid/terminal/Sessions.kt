@@ -92,7 +92,7 @@ object Sessions {
         fun onEmpty()
     }
 
-    const val VERSION = "3.3"
+    const val VERSION = "3.4"
     val list = ArrayList<TerminalSession>()
     private val roots = HashSet<TerminalSession>()
     var current = 0
@@ -151,7 +151,10 @@ object Sessions {
         m["MACOID_VERSION"] = VERSION
         m["HOME"] = b + "/" + (if (root) "root-home" else "home")
         m["TMPDIR"] = b + "/" + (if (root) "tmp-root" else "tmp")
-        m["PATH"] = "$b/bin:/system/bin:/system/xbin" +
+        // native (Termux-style) prefix: files/usr. Must match the prefix the packages were built for (see tools/build-repo.sh).
+        val prefix = File(app.filesDir, "usr").absolutePath
+        m["PREFIX"] = prefix
+        m["PATH"] = "$b/bin:$prefix/bin:/system/bin:/system/xbin" +
             (if (root) ":/sbin:/system/sbin:/vendor/bin:/data/adb/magisk:/data/adb/ksu/bin" else "")
         m["TERM"] = "xterm-256color"
         m["COLORTERM"] = "truecolor"

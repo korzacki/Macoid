@@ -1,4 +1,4 @@
-# Macoid 3.3 - a macOS-style terminal for Android (real PTY terminal, root-capable)
+# Macoid 3.4 - a macOS-style terminal for Android (real PTY terminal, root-capable)
 
 Macoid gives you a Mac-like shell on Android: real `git`, a GitHub CLI (`gh`), macOS commands
 (`open`, `pbcopy`, `defaults`, `sw_vers`, `sysctl`, `osascript`, ...), and a way to run **any other macOS
@@ -79,6 +79,23 @@ Installed commands work immediately (no shell restart): each one gets a launcher
 Everything lives in the app's private storage (`$MACOID/linux`) and survives restarts and updates signed with the same key.
 The package index is cached and refreshed every 12 h, so a second install is mostly just the download of the package itself.
 Only tools that need a real Mac (xcodebuild, codesign, simctl ...) and `macoid build` still use GitHub Actions - see below.
+
+## Native packages, Termux-style (3.4)
+`pkg install` now works the way Termux does: packages are **compiled once, ahead of time** (that is the slow, hours-long part)
+and a phone only downloads a prebuilt `.deb` and unpacks it. Binaries run straight on Android - no proot, no GitHub runner.
+```
+pkg install python git clang   # first time: one bootstrap zip, then each install is seconds
+pkg search ripgrep | pkg list | pkg upgrade | pkg doctor
+```
+* Only packages the native repo does not have fall back to the old local Alpine (proot) route.
+* Installed commands are on `PATH` at once (`$PREFIX/bin`, `PREFIX=files/usr`).
+* **You must build the repo once** because Macoid's app id differs from Termux's, so Termux's own packages cannot be reused.
+  On GitHub: **Settings -> Pages -> Source: GitHub Actions**, then **Actions -> Build native package repo -> Run workflow**
+  (hours; it only runs when you start it, never on installs). When it ends, copy the URL from the run summary into
+  **Settings -> Secrets and variables -> Actions -> Variables -> `NAT_BASE_URL`**, then run **Build APK** - it writes the URL into the app.
+  Without GitHub: `./tools/build-repo.sh` on a Docker PC/VPS and host `dist/` yourself.
+  Limits: 6 h per job, Pages 1 GB (default set fits; `full` may not), and a public repo is advised (private repos have a small free-minutes quota).
+* `MACOID_NATIVE=0` turns it off; `pkg reset --native --yes` deletes the native packages.
 
 ## Apple tools, fast (3.2)
 Real Xcode cannot run on a phone, so Macoid replaces what can be replaced and picks the cheapest runner for the rest.
