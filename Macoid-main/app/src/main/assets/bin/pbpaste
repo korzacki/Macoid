@@ -1,3 +1,0 @@
-#!/system/bin/sh
-. "$MACOID/lib/common.sh"
-rm -f "$HOME/.pasteboard_out"; bridge macoid.CLIP_GET; sleep 0.2; cat "$HOME/.pasteboard_out" 2>/dev/null

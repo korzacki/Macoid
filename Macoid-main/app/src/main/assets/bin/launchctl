@@ -1,5 +1,0 @@
-#!/system/bin/sh
-case "$1" in
-  list|"") printf 'PID\tStatus\tLabel\n'; ps -A -o PID,NAME 2>/dev/null | tail -n +2 | while read p n; do printf '%s\t0\t%s\n' "$p" "$n"; done;;
-  *) echo "launchctl: '$1' is not supported (Android has no launchd). Use 'launchctl list'." >&2; exit 1;;
-esac
