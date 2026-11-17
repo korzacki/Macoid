@@ -2,10 +2,10 @@ package com.macoid.terminal
 
 import android.Manifest
 import android.app.Activity
-import android.app.AlertDialog
 import android.content.Intent
 import android.content.SharedPreferences
 import android.graphics.Color
+import android.graphics.Typeface
 import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
@@ -14,10 +14,9 @@ import android.view.Gravity
 import android.view.KeyEvent
 import android.view.View
 import android.view.inputmethod.InputMethodManager
-import android.widget.Button
+import android.widget.FrameLayout
 import android.widget.HorizontalScrollView
 import android.widget.LinearLayout
-import android.widget.PopupMenu
 import android.widget.TextView
 import android.widget.Toast
 import com.termux.terminal.TerminalSession
@@ -29,17 +28,13 @@ class MainActivity : Activity(), Sessions.Ui {
     private lateinit var tv: TerminalView
     private lateinit var tabs: LinearLayout
     private lateinit var tabScroll: HorizontalScrollView
-    private lateinit var ctrlBtn: Button
-    private lateinit var altBtn: Button
+    private lateinit var ctrlBtn: TextView
+    private lateinit var altBtn: TextView
     private lateinit var prefs: SharedPreferences
     private val main = Handler(Looper.getMainLooper())
     private var ctrl = false
     private var alt = false
     private var fontDp = 14
-
-    private val cBar = 0xFF1C1C1E.toInt()
-    private val cBtn = 0xFF2C2C2E.toInt()
-    private val cOn = 0xFF0A84FF.toInt()
 
     private val viewClient = proxyOf<TerminalViewClient> { n, a -> viewCall(n, a) }
 
@@ -108,60 +103,79 @@ class MainActivity : Activity(), Sessions.Ui {
 
     // ---------------------------------------------------------------- UI
 
-    private fun dp(v: Int) = (v * resources.displayMetrics.density).toInt()
+    private fun dp(v: Int) = Skin.dp(this, v)
 
-    private fun btn(label: String, onClick: () -> Unit): Button = Button(this).apply {
-        text = label; isAllCaps = false; textSize = 13f; setTextColor(Color.WHITE)
-        setBackgroundColor(cBtn); minWidth = 0; minimumWidth = 0; minHeight = 0; minimumHeight = 0
-        setPadding(dp(8), 0, dp(8), 0)
-        setOnClickListener { onClick() }
-    }
-
-    private fun lp(w: Int, weight: Float = 0f) = LinearLayout.LayoutParams(w, dp(40), weight).apply { setMargins(dp(1), dp(1), dp(1), dp(1)) }
+    private fun keyLp(w: Int, weight: Float = 0f) =
+        LinearLayout.LayoutParams(w, dp(40), weight).apply { setMargins(dp(2), dp(2), dp(2), dp(2)) }
 
     private fun buildUi() {
-        val col = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL; setBackgroundColor(Color.BLACK) }
+        window.statusBarColor = Skin.bgTop
+        window.navigationBarColor = Skin.bgBottom
 
-        // tab bar
-        val bar = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL; gravity = Gravity.CENTER_VERTICAL; setBackgroundColor(cBar) }
+        val col = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            background = Skin.backdrop()
+            setPadding(dp(8), dp(8), dp(8), dp(8))
+        }
+
+        // floating tab bar: session chips on the left, round action buttons on the right
+        val bar = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL; gravity = Gravity.CENTER_VERTICAL
+            background = Skin.rounded(Skin.cSurface, dp(28).toFloat(), Skin.cEdge)
+            setPadding(dp(6), dp(5), dp(6), dp(5))
+        }
         tabs = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL }
-        tabScroll = HorizontalScrollView(this).apply { isHorizontalScrollBarEnabled = false; addView(tabs) }
-        bar.addView(tabScroll, LinearLayout.LayoutParams(0, dp(40), 1f))
-        bar.addView(btn("+") { newSession(false) }, lp(dp(44)))
-        bar.addView(btn("#") { newSession(true) }, lp(dp(44)))
-        bar.addView(btn("\u22EE") {}.also { b -> b.setOnClickListener { menu(b) } }, lp(dp(44)))
+        tabScroll = HorizontalScrollView(this).apply { isHorizontalScrollBarEnabled = false; overScrollMode = View.OVER_SCROLL_NEVER; addView(tabs) }
+        bar.addView(tabScroll, LinearLayout.LayoutParams(0, dp(42), 1f))
+        val round = { w: Int -> LinearLayout.LayoutParams(w, dp(42)).apply { leftMargin = dp(4) } }
+        bar.addView(Skin.key(this, "+", 20f, 21) { newSession(false) }, round(dp(42)))
+        bar.addView(Skin.key(this, "#", 17f, 21) { newSession(true) }.also { it.setTextColor(Skin.cRoot) }, round(dp(42)))
+        bar.addView(Skin.key(this, "\u22EE", 20f, 21) {}.also { b -> b.setOnClickListener { menu(b) } }, round(dp(42)))
         col.addView(bar, LinearLayout.LayoutParams(-1, -2))
 
-        // terminal
+        // terminal sits on its own rounded, softly outlined card
+        val card = FrameLayout(this).apply {
+            background = Skin.rounded(Color.BLACK, dp(24).toFloat(), Skin.cEdge)
+            setClipToOutline(true)
+            setPadding(dp(10), dp(8), dp(10), dp(6))
+        }
         tv = TerminalView(this, null).apply { isFocusable = true; isFocusableInTouchMode = true }
         tv.setTerminalViewClient(viewClient)
         tv.setTextSize(dp(fontDp))
-        col.addView(tv, LinearLayout.LayoutParams(-1, 0, 1f))
+        card.addView(tv, FrameLayout.LayoutParams(-1, -1))
+        col.addView(card, LinearLayout.LayoutParams(-1, 0, 1f).apply { topMargin = dp(8) })
 
-        // extra keys, row 1
-        val r1 = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL; setBackgroundColor(Color.BLACK) }
-        r1.addView(btn("ESC") { sendText("\u001b", raw = true) }, lp(0, 1f))
-        r1.addView(btn("TAB") { sendText("\t", raw = true) }, lp(0, 1f))
-        ctrlBtn = btn("CTRL") { ctrl = !ctrl; updateMods() }
-        altBtn = btn("ALT") { alt = !alt; updateMods() }
-        r1.addView(ctrlBtn, lp(0, 1f)); r1.addView(altBtn, lp(0, 1f))
-        r1.addView(btn("\u2190") { sendKey(KeyEvent.KEYCODE_DPAD_LEFT) }, lp(0, 1f))
-        r1.addView(btn("\u2193") { sendKey(KeyEvent.KEYCODE_DPAD_DOWN) }, lp(0, 1f))
-        r1.addView(btn("\u2191") { sendKey(KeyEvent.KEYCODE_DPAD_UP) }, lp(0, 1f))
-        r1.addView(btn("\u2192") { sendKey(KeyEvent.KEYCODE_DPAD_RIGHT) }, lp(0, 1f))
-        col.addView(r1, LinearLayout.LayoutParams(-1, -2))
-
-        // extra keys, row 2 (scrolls)
-        val r2 = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL }
-        r2.addView(btn("HOME") { sendKey(KeyEvent.KEYCODE_MOVE_HOME) }, lp(-2))
-        r2.addView(btn("END") { sendKey(KeyEvent.KEYCODE_MOVE_END) }, lp(-2))
-        r2.addView(btn("PGUP") { sendKey(KeyEvent.KEYCODE_PAGE_UP) }, lp(-2))
-        r2.addView(btn("PGDN") { sendKey(KeyEvent.KEYCODE_PAGE_DOWN) }, lp(-2))
-        "/ - | ~ $ * ' \" \\ ; = & < > _ . : ! # % ^ @ ` , ( ) { } [ ] +".split(" ").forEach { k ->
-            r2.addView(btn(k) { sendText(k) }, lp(dp(40)))
+        // extra keys live on a floating panel
+        val keys = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            background = Skin.rounded(Skin.cSurface, dp(26).toFloat(), Skin.cEdge)
+            setPadding(dp(5), dp(4), dp(5), dp(4))
         }
-        col.addView(HorizontalScrollView(this).apply { isHorizontalScrollBarEnabled = false; setBackgroundColor(Color.BLACK); addView(r2) },
-            LinearLayout.LayoutParams(-1, -2))
+
+        val r1 = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL }
+        r1.addView(Skin.key(this, "ESC") { sendText("\u001b", raw = true) }, keyLp(0, 1f))
+        r1.addView(Skin.key(this, "TAB") { sendText("\t", raw = true) }, keyLp(0, 1f))
+        ctrlBtn = Skin.key(this, "CTRL") { ctrl = !ctrl; updateMods() }
+        altBtn = Skin.key(this, "ALT") { alt = !alt; updateMods() }
+        r1.addView(ctrlBtn, keyLp(0, 1f)); r1.addView(altBtn, keyLp(0, 1f))
+        r1.addView(Skin.key(this, "\u2190", 16f) { sendKey(KeyEvent.KEYCODE_DPAD_LEFT) }, keyLp(0, 1f))
+        r1.addView(Skin.key(this, "\u2193", 16f) { sendKey(KeyEvent.KEYCODE_DPAD_DOWN) }, keyLp(0, 1f))
+        r1.addView(Skin.key(this, "\u2191", 16f) { sendKey(KeyEvent.KEYCODE_DPAD_UP) }, keyLp(0, 1f))
+        r1.addView(Skin.key(this, "\u2192", 16f) { sendKey(KeyEvent.KEYCODE_DPAD_RIGHT) }, keyLp(0, 1f))
+        keys.addView(r1, LinearLayout.LayoutParams(-1, -2))
+
+        val r2 = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL }
+        r2.addView(Skin.key(this, "HOME") { sendKey(KeyEvent.KEYCODE_MOVE_HOME) }, keyLp(-2))
+        r2.addView(Skin.key(this, "END") { sendKey(KeyEvent.KEYCODE_MOVE_END) }, keyLp(-2))
+        r2.addView(Skin.key(this, "PGUP") { sendKey(KeyEvent.KEYCODE_PAGE_UP) }, keyLp(-2))
+        r2.addView(Skin.key(this, "PGDN") { sendKey(KeyEvent.KEYCODE_PAGE_DOWN) }, keyLp(-2))
+        "/ - | ~ $ * ' \" \\ ; = & < > _ . : ! # % ^ @ ` , ( ) { } [ ] +".split(" ").forEach { k ->
+            r2.addView(Skin.key(this, k, 15f) { sendText(k) }, keyLp(dp(40)))
+        }
+        keys.addView(HorizontalScrollView(this).apply {
+            isHorizontalScrollBarEnabled = false; overScrollMode = View.OVER_SCROLL_NEVER; addView(r2)
+        }, LinearLayout.LayoutParams(-1, -2))
+        col.addView(keys, LinearLayout.LayoutParams(-1, -2).apply { topMargin = dp(8) })
 
         setContentView(col)
         updateMods()
@@ -172,15 +186,18 @@ class MainActivity : Activity(), Sessions.Ui {
         Sessions.list.forEachIndexed { i, s ->
             val root = Sessions.isRoot(s)
             val title = s.title?.takeIf { it.isNotBlank() }?.let { ": " + it.take(14) } ?: ""
+            val active = i == Sessions.current
+            val tone = if (root) Skin.cRoot else Skin.cAccent
             val t = TextView(this).apply {
                 text = (i + 1).toString() + (if (root) " #" else " \$") + title
-                setTextColor(Color.WHITE); textSize = 13f; gravity = Gravity.CENTER
-                setPadding(dp(12), 0, dp(12), 0)
-                setBackgroundColor(if (i == Sessions.current) (if (root) 0xFFB3261E.toInt() else cOn) else cBtn)
+                textSize = 13f; gravity = Gravity.CENTER; typeface = Skin.medium
+                setTextColor(if (active) Skin.cOnAccent else if (root) Skin.cRoot else Skin.cMuted)
+                setPadding(dp(16), 0, dp(16), 0)
+                background = Skin.ripple(Skin.rounded(if (active) tone else Skin.cKey, dp(21).toFloat()))
                 setOnClickListener { Sessions.current = i; show(i) }
                 setOnLongClickListener { confirmClose(s); true }
             }
-            tabs.addView(t, lp(-2))
+            tabs.addView(t, LinearLayout.LayoutParams(-2, dp(42)).apply { setMargins(dp(2), 0, dp(2), 0) })
         }
         main.post { tabScroll.fullScroll(View.FOCUS_RIGHT) }
     }
@@ -203,37 +220,23 @@ class MainActivity : Activity(), Sessions.Ui {
     }
 
     private fun confirmClose(s: TerminalSession) {
-        AlertDialog.Builder(this).setMessage("Close this session?")
-            .setPositiveButton("Close") { _, _ -> Sessions.remove(s) }
-            .setNegativeButton("Cancel", null).show()
+        Skin.dialog(this, "Close this session?",
+            Skin.Act("Cancel"),
+            Skin.Act("Close", Skin.DANGER) { Sessions.remove(s) })
     }
 
     private fun menu(anchor: View) {
-        val m = PopupMenu(this, anchor)
-        m.menu.add(0, 1, 0, "Paste")
-        m.menu.add(0, 2, 0, "New session")
-        m.menu.add(0, 3, 0, "New root session (su)")
-        m.menu.add(0, 4, 0, "Close this session")
-        m.menu.add(0, 5, 0, "Font bigger")
-        m.menu.add(0, 6, 0, "Font smaller")
-        m.menu.add(0, 7, 0, if (TerminalService.wakeHeld()) "Wake lock: turn off" else "Wake lock: turn on")
-        m.menu.add(0, 8, 0, "Check root access")
-        m.menu.add(0, 9, 0, "Exit (close all sessions)")
-        m.setOnMenuItemClickListener {
-            when (it.itemId) {
-                1 -> Sessions.paste(cur())
-                2 -> newSession(false)
-                3 -> newSession(true)
-                4 -> cur()?.let { s -> Sessions.remove(s) }
-                5 -> zoom(true)
-                6 -> zoom(false)
-                7 -> TerminalService.toggleWake(this)
-                8 -> checkRoot()
-                9 -> Sessions.closeAll()
-            }
-            true
-        }
-        m.show()
+        Skin.popup(this, anchor, listOf(
+            Skin.Item("Paste") { Sessions.paste(cur()) },
+            Skin.Item("New session", divider = true) { newSession(false) },
+            Skin.Item("New root session (su)") { newSession(true) },
+            Skin.Item("Close this session") { cur()?.let { s -> Sessions.remove(s) } },
+            Skin.Item("Font bigger", divider = true) { zoom(true) },
+            Skin.Item("Font smaller") { zoom(false) },
+            Skin.Item(if (TerminalService.wakeHeld()) "Wake lock: turn off" else "Wake lock: turn on", divider = true) { TerminalService.toggleWake(this) },
+            Skin.Item("Check root access") { checkRoot() },
+            Skin.Item("Exit (close all sessions)", danger = true, divider = true) { Sessions.closeAll() }
+        ))
     }
 
     private fun checkRoot() {
@@ -270,8 +273,8 @@ class MainActivity : Activity(), Sessions.Ui {
     }
 
     private fun updateMods() {
-        ctrlBtn.setBackgroundColor(if (ctrl) cOn else cBtn)
-        altBtn.setBackgroundColor(if (alt) cOn else cBtn)
+        Skin.styleKey(this, ctrlBtn, ctrl)
+        Skin.styleKey(this, altBtn, alt)
     }
 
     /** Arrows / Home / End / PgUp / PgDn go through the terminal view so application-cursor mode (vim, less, ...) is respected. */

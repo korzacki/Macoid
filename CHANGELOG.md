@@ -2,6 +2,15 @@
 
 All notable changes to Macoid are documented here.
 
+## [Unreleased]
+
+### Changed
+- **New look.** Deep graphite gradient backdrop; floating rounded tab bar with pill-shaped session chips (blue = normal,
+  coral = root); the terminal sits on its own rounded card; extra keys are rounded and live on a floating panel with
+  haptic feedback; the overflow menu and confirm dialogs are rounded instead of the stock Android ones.
+- Editor: floating header, rounded text card, a dot next to the file name when there are unsaved changes.
+- Shared styling lives in the new `Skin.kt`.
+
 ## [3.2] - 2026-11-17
 
 ### Added
