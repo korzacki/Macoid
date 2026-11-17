@@ -2,6 +2,27 @@
 
 All notable changes to Macoid are documented here.
 
+## [3.0] - 2026-11-17
+
+### Added
+- **Real terminal.** The line-by-line text view is replaced by a real PTY terminal with full xterm emulation
+  (the same terminal-emulator / terminal-view libraries Termux uses): colours, cursor movement, scrollback,
+  text selection, pinch-to-zoom, Ctrl/Alt, arrow keys, `top`, full-screen programs, interactive prompts.
+- **Multiple sessions** (tabs): `+` new shell, `#` new **root** shell, long-press a tab to close it.
+- **Root support (`su`).** On a rooted phone (Magisk / KernelSU / APatch) the `#` button opens a root shell; inside any
+  shell `tsu` enters a root shell and `sudo <cmd>` runs one command as root. The root shell has its own home
+  (`root-home`) so files root creates cannot lock the normal shell out; `macoid root status|fixperms` helps.
+  Macoid does not root the phone itself - it needs a phone that is already rooted.
+- **Foreground service** keeps sessions alive in the background; notification has Wake lock and Exit actions.
+- **Extra keys**: ESC, TAB, CTRL, ALT, arrows, HOME/END/PGUP/PGDN and a scrolling row of symbols.
+- **Root-aware editor** (`edit`, also `nano`/`vi`/`vim`): reads and saves root-only files through su.
+
+### Changed
+- `sudo` is now real (via su) instead of a no-op. `top` is the real `top`. `gh auth login` no longer echoes the token.
+- The shell is started with `$ENV` pointing to `macoid.rc` (all aliases/functions are unchanged), emacs line editing,
+  history in `~/.mksh_history`.
+- Build needs JitPack (`maven("https://jitpack.io")`) and `android.useAndroidX=true`.
+
 ## [2.2] - 2026-11-17
 
 ### Added

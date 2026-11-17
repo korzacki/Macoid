@@ -55,6 +55,12 @@ class BridgeReceiver : BroadcastReceiver() {
                     mp.setOnCompletionListener { it.release() }
                     mp.prepare(); mp.start()
                 }
+                "macoid.EDIT" -> c.startActivity(
+                    Intent(c, EditorActivity::class.java).putExtra("path", i.getStringExtra("path") ?: return)
+                        .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
+                "macoid.SETUP_STORAGE" -> c.startActivity(
+                    Intent(c, MainActivity::class.java).setAction("macoid.SETUP_STORAGE")
+                        .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_SINGLE_TOP))
                 "macoid.VIBRATE" -> {
                     @Suppress("DEPRECATION")
                     val v = c.getSystemService(Context.VIBRATOR_SERVICE) as Vibrator

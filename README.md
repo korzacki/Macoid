@@ -1,4 +1,4 @@
-# Macoid 2.0 - a macOS-style terminal for Android
+# Macoid 3.0 - a macOS-style terminal for Android (real PTY terminal, root-capable)
 
 Macoid gives you a Mac-like shell on Android: real `git`, a GitHub CLI (`gh`), macOS commands
 (`open`, `pbcopy`, `defaults`, `sw_vers`, `sysctl`, `osascript`, ...), and a way to run **any other macOS
@@ -63,14 +63,22 @@ Built-ins: `hello-cmd` (template), `repo-backup` (zip the current folder to ~/st
 (cloud-build an Android project and copy the APK to ~/storage/Download). Publish a skill by pushing its folder to GitHub.
 Macoid has no AI model on the phone, so a skill here is an installable command package, not a prompt.
 
+## Root
+Macoid cannot root a phone - it uses `su` on a phone that is **already rooted** (Magisk, KernelSU, APatch ...).
+* `#` button: new root session (approve the su prompt). `tsu`: root shell from a normal tab. `sudo <cmd>`: one command as root.
+* `macoid root status` tests su; `macoid root fixperms` hands the app folder back to the app user after root work.
+* `edit <file>` opens root-only files too (saves through su).
+* pbcopy/pbpaste/notify from inside a root shell are not supported (they talk to the app through its own home folder).
+
 ## Editing & storage
-* `nano|vi|vim|edit <file>` opens a built-in editor dialog.
+* `nano|vi|vim|edit <file>` opens a built-in editor screen.
 * `setup-storage` requests storage permission; shared storage is at `~/storage`.
-* Tab key completes file names. `^C` restarts the shell (keeps your directory).
+* Tab completes file names (shell-native), Ctrl-C works like a normal terminal, arrow keys/history work.
 
 ## Limits (honest list)
 * This is an emulation layer on Android's shell - not macOS. Binaries for Darwin cannot run on the phone; they run in the cloud.
-* Full-screen programs (real vim/top/less) and interactive REPLs are not supported; pipelines into cloud commands are not supported.
+* The terminal is real, but Android ships no vim/nano/less/python: those names are an editor screen, `cat`, or cloud commands.
+  Termux packages cannot be installed (they are built for another prefix). Pipelines into cloud commands are not supported.
 * No SSH client; no GUI apps.
 * The Kotlin sources for git/gh were written without access to an Android SDK/JGit in the authoring environment; the first
   GitHub Actions build is the compile check.

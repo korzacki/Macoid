@@ -6,8 +6,8 @@ android {
         applicationId = "com.macoid.terminal"
         minSdk = 26          // JGit needs java.nio.file (API 26+)
         targetSdk = 28       // allows exec from the app data dir (like Termux)
-        versionCode = 2
-        versionName = "2.0"
+        versionCode = 3
+        versionName = "3.0"
     }
     compileOptions { sourceCompatibility = JavaVersion.VERSION_17; targetCompatibility = JavaVersion.VERSION_17 }
     kotlinOptions { jvmTarget = "17" }
@@ -22,4 +22,7 @@ android {
 dependencies {
     implementation("org.eclipse.jgit:org.eclipse.jgit:5.13.3.202401111512-r")
     implementation("org.slf4j:slf4j-nop:1.7.36")
+    // Real terminal: PTY + full VT100/xterm emulation + terminal view (same libraries Termux uses)
+    implementation("com.github.termux.termux-app:terminal-view:v0.118.0")
+    implementation("com.github.termux.termux-app:terminal-emulator:v0.118.0")
 }

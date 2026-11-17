@@ -1,7 +1,10 @@
 # Macoid init (sourced by the app's shell at startup)
-export MACOID_VERSION=2.0
+export MACOID_VERSION=3.0
 export PATH="$HOME/.local/bin:$PATH"
 mkdir -p "$HOME/.local/bin" "$HOME/.Trash" 2>/dev/null
+
+# root session = uid 0 (started from the app's "#" button or with 'tsu')
+if [ "$(id -u 2>/dev/null)" = 0 ]; then export USER=root LOGNAME=root MACOID_ROOT=1; else export USER=macoid LOGNAME=macoid; fi
 
 # 1) every script in $MACOID/bin becomes a command (functions dodge exec restrictions; names with - or . become aliases)
 for f in "$MACOID"/bin/*; do
@@ -47,17 +50,21 @@ if [ -f "$HOME/.macoid/cloudbins" ]; then
 fi
 
 # 4) macOS-flavoured shell environment
+unalias vi vim nano pico less more top sudo 2>/dev/null
 alias ll='ls -la'
 alias la='ls -A'
 alias l='ls -CF'
 alias neofetch='macfetch'
 alias less='cat'
 alias more='cat'
-alias top='top -b -n 1'
-alias vi='vim' ; alias nano='vim'
-sudo() { "$@"; }
-export USER=macoid LOGNAME=macoid SHELL=/system/bin/sh HOSTNAME=macoid
-export EDITOR=vim VISUAL=vim PAGER=cat
+alias vi='edit' ; alias vim='edit' ; alias nano='edit' ; alias pico='edit'
+# sudo = run one command as root through su (needs a rooted phone); already root -> just run it
+sudo() { if [ "$(id -u)" = 0 ]; then "$@"; else /system/bin/sh "$MACOID/bin/sudo" "$@"; fi; }
+export SHELL=/system/bin/sh HOSTNAME=macoid
+export EDITOR=edit VISUAL=edit PAGER=cat
+export HISTFILE="$HOME/.mksh_history" HISTSIZE=2000
+set -o emacs 2>/dev/null
+if [ "$(id -u)" = 0 ]; then PS1='macoid(root):${PWD:-?} # '; else PS1='macoid:${PWD:-?} $ '; fi
 
 # 5) your own settings survive restarts: ~/.macoid/aliases.rc (written by 'alias') and ~/.macoid/user.rc (free-form, edit it yourself)
 mkdir -p "$HOME/.macoid" 2>/dev/null
@@ -94,4 +101,3 @@ _macoid_unalias() {
 }
 alias unalias='_macoid_unalias'
 alias alias='_macoid_alias'
-cd "$HOME"
