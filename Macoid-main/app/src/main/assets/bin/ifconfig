@@ -1,0 +1,7 @@
+#!/system/bin/sh
+for i in /sys/class/net/*; do
+  n=${i##*/}; st=$(cat $i/operstate 2>/dev/null)
+  echo "$n: flags=<$( [ "$st" = up ] && echo UP,RUNNING || echo "$st" )>  mtu $(cat $i/mtu 2>/dev/null)"
+  ip -4 -o addr show dev "$n" 2>/dev/null | sed 's/.*inet \([0-9.]*\)\/\([0-9]*\).*/\tinet \1 prefixlen \2/'
+  a=$(cat $i/address 2>/dev/null); [ -n "$a" ] && echo "	ether $a"
+done

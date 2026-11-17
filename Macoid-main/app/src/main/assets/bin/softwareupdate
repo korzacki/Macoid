@@ -1,0 +1,5 @@
+#!/system/bin/sh
+case "$1" in
+  -l|--list|"") echo "Software Update Tool"; echo; echo "Finding available software"; echo "No new software available.";;
+  *) echo "softwareupdate: installing OS updates is not supported. Update Macoid from your GitHub Actions build." >&2; exit 1;;
+esac

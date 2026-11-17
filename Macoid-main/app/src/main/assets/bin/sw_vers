@@ -1,0 +1,10 @@
+#!/system/bin/sh
+. "$MACOID/lib/common.sh"
+id=$(prop ro.build.id)
+case "$1" in
+  -productName|--productName) echo macOS;;
+  -productVersion|--productVersion) echo 14.0;;
+  -buildVersion|--buildVersion) echo "$id";;
+  *) printf 'ProductName:\t\tmacOS\nProductVersion:\t\t14.0\nBuildVersion:\t\t%s\n' "$id"
+     echo "(Macoid on Android $(prop ro.build.version.release))";;
+esac

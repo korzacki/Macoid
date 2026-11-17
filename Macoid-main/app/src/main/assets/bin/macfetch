@@ -1,0 +1,9 @@
+#!/system/bin/sh
+. "$MACOID/lib/common.sh"
+echo "macoid@$(prop ro.product.model | tr ' ' '-')"
+echo "------------------"
+echo "OS:     macOS 14.0 emulation on Android $(prop ro.build.version.release)"
+echo "Kernel: $(uname -r)"
+echo "CPU:    $(prop ro.board.platform) ($(ncpu) cores)"
+echo "RAM:    $(( $(mem_kb MemTotal) / 1024 )) MB"
+echo "Shell:  sh (mksh) + Macoid $MACOID_VERSION"

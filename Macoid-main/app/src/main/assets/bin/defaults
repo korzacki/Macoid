@@ -1,0 +1,21 @@
+#!/system/bin/sh
+DB="$HOME/.defaults"; touch "$DB"; T=$(printf '\t')
+dom=$2; [ "$dom" = -g ] || [ "$dom" = -globalDomain ] && dom=NSGlobalDomain
+key=$3
+save() { grep -v "^$dom$T$key$T" "$DB" > "$DB.tmp"; printf '%s\t%s\t%s\t%s\n' "$dom" "$key" "$1" "$2" >> "$DB.tmp"; mv "$DB.tmp" "$DB"; }
+case "$1" in
+  write)
+    type=string; val=$4
+    case "$4" in -string) type=string; val=$5;; -int|-integer) type=integer; val=$5;; -float) type=float; val=$5;; -bool|-boolean) type=boolean; case "$5" in YES|yes|true|TRUE|1) val=1;; *) val=0;; esac;; esac
+    save "$type" "$val";;
+  read)
+    if [ -z "$key" ]; then echo "{"; grep "^$dom$T" "$DB" | while IFS="$T" read d k t v; do echo "    $k = $v;"; done; echo "}"; exit 0; fi
+    line=$(grep "^$dom$T$key$T" "$DB" | tail -n 1)
+    [ -z "$line" ] && { echo "The domain/default pair of ($dom, $key) does not exist" >&2; exit 1; }
+    echo "$line" | cut -f4;;
+  read-type) line=$(grep "^$dom$T$key$T" "$DB" | tail -n 1); [ -z "$line" ] && exit 1; echo "Type is $(echo "$line" | cut -f3)";;
+  delete) if [ -z "$key" ]; then grep -v "^$dom$T" "$DB" > "$DB.tmp"; else grep -v "^$dom$T$key$T" "$DB" > "$DB.tmp"; fi; mv "$DB.tmp" "$DB";;
+  domains) cut -f1 "$DB" | sort -u | tr '\n' ',' | sed 's/,$/\n/; s/,/, /g';;
+  find) grep -i "$2" "$DB" | cut -f1,2 | sed "s/$T/ -> /";;
+  *) echo "usage: defaults [read|write|read-type|delete|domains|find] <domain> <key> [-type] [value]" >&2; exit 1;;
+esac

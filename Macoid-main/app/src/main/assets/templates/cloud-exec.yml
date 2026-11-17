@@ -1,0 +1,50 @@
+name: macoid
+on:
+  push:
+    branches: ["job-**"]
+permissions:
+  contents: write
+jobs:
+  run:
+    runs-on: __RUNNER__
+    env:
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Run command
+        shell: bash
+        run: |
+          touch "$RUNNER_TEMP/marker"
+          printf '%s\n' "MACOID""-BEGIN"
+          set +e
+          bash .macoid/cmd.sh
+          rc=$?
+          printf '%s\n' "MACOID""-END"
+          exit $rc
+      - name: Collect new files
+        if: always()
+        shell: bash
+        run: |
+          PY=$(command -v python3 || command -v python)
+          "$PY" - <<'PYEOF'
+          import os, shutil
+          t = os.environ["RUNNER_TEMP"]
+          m = os.path.getmtime(os.path.join(t, "marker"))
+          out = os.path.join(t, "out")
+          os.makedirs(out, exist_ok=True)
+          for r, d, f in os.walk("."):
+              d[:] = [x for x in d if x not in (".git", ".macoid", ".github")]
+              for n in f:
+                  p = os.path.join(r, n)
+                  if os.path.getmtime(p) > m:
+                      dst = os.path.join(out, p)
+                      os.makedirs(os.path.dirname(dst), exist_ok=True)
+                      shutil.copy2(p, dst)
+          PYEOF
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: out
+          path: ${{ runner.temp }}/out
+          if-no-files-found: ignore
+          retention-days: 1
