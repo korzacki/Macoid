@@ -26,6 +26,8 @@ class MainActivity : Activity() {
     private var cwd = "~"
     private var curPath = ""
     private var gen = 0
+    private var busy = false
+    private var lastOut = ""
     private val pending = StringBuilder()
     private lateinit var root: File
     private val ansi = Regex("\u001B\\[[0-9;?]*[A-Za-z]")
@@ -142,7 +144,7 @@ class MainActivity : Activity() {
         } catch (e: Exception) { emit("[error: ${e.message}]\n") }
     }
 
-    private fun restart() { gen++; proc?.destroyForcibly(); emit("^C\n"); startShell() }
+    private fun restart() { busy = false; gen++; proc?.destroyForcibly(); emit("^C\n"); startShell() }
 
     private fun resolve(arg: String): File = when {
         arg.startsWith("/") -> File(arg)
@@ -157,7 +159,8 @@ class MainActivity : Activity() {
         val t = c.trim()
         val first = t.substringBefore(' ')
         if (t == "clear" || t == "reset") { out.text = ""; return }
-        emit("${promptLbl.text} $c\n")
+        val secret = busy && (lastOut.contains("token", true) || lastOut.contains("password", true))
+        emit(if (secret) "(hidden)\n" else if (busy) "$c\n" else "${promptLbl.text} $c\n")
         when {
             t == "exit" || t == "logout" -> restart()
             first in editors && t.contains(' ') -> openEditor(t.substringAfter(' ').trim().trim('"', '\''))
@@ -165,7 +168,7 @@ class MainActivity : Activity() {
                 requestPermissions(arrayOf(Manifest.permission.WRITE_EXTERNAL_STORAGE, Manifest.permission.READ_EXTERNAL_STORAGE), 1)
                 emit("Requested storage access. Your shared storage is at ~/storage\n")
             }
-            else -> send(c)
+            else -> if (busy) send(c, false) else { busy = true; send(c) }
         }
     }
 
@@ -215,6 +218,7 @@ class MainActivity : Activity() {
             if (pending.startsWith("\n")) pending.deleteCharAt(0)
             val home = File(root, "home").absolutePath
             curPath = path
+            busy = false
             cwd = if (path.startsWith(home)) "~" + path.removePrefix(home) else path
             ui.post { updatePrompt() }
         }
@@ -222,6 +226,7 @@ class MainActivity : Activity() {
 
     private fun emit(t: String) {
         val clean = ansi.replace(t, "")
+        lastOut = (lastOut + clean).takeLast(160)
         if (clean.isEmpty()) return
         ui.post {
             out.append(clean)
