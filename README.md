@@ -6,7 +6,7 @@ command, and to compile apps for any platform, on real GitHub Actions runners**.
 Info: Unpack workflow is for unpacking zip file that contains in the code, so if you modified some of the code. and you just too lazy to unpack it, run that workflow.
 
 ## Build the app
-1. Push this folder to a GitHub repository.
+1. Push this folder to a GitHub repository or fork it (i'll give access).
 2. **Actions -> Build APK** -> download the `Macoid-apk` artifact (`app-debug.apk`) and install it
    (allow installs from unknown sources). Or open the folder in Android Studio and run *Build > Build APK*.
 
