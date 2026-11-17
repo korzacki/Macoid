@@ -19,6 +19,14 @@ case "$sub" in
       echo "[macoid] catalog now has $(count) names. Restart the shell (^C) to load them." >&2
     else echo "sync failed: no list came back" >&2; fi
     rm -rf "$d";;
+  installs)
+    . "$MACOID/lib/installs.sh"
+    case "$1" in
+      ""|list) inst_list;;
+      clear) rm -f "$INST_FILE" "$BINS_FILE"; echo "Cleared saved installs.";;
+      rm|remove) [ -z "$2" ] && die "usage: macoid installs rm <package>"; inst_remove "$2" && echo "Removed $2." || die "$2: not in saved installs";;
+      *) die "usage: macoid installs [list|rm <package>|clear]";;
+    esac;;
   doctor)
     echo "Macoid $MACOID_VERSION"
     [ -f "$MACOID_APK" ] && echo "[ok] APK classpath: $MACOID_APK" || echo "[!!] APK not found"
@@ -36,6 +44,7 @@ Macoid - macOS-style terminal for Android
                           swift, flutter-apk, gradle-java, maven, node, electron, python, go, rust,
                           cmake, dotnet) and download the result into ./build-output
   macoid cloud [--os macos|ubuntu|windows] [--fetch] -- <cmd...>   run any command on a real runner
+  macoid installs         list what you installed (pip/npm -g/gem/cargo/go/brew) - saved and re-applied automatically
   macoid sync-commands    pull the real command list from a Mac (extends the catalog)
   macoid commands|doctor|version
   skill install|list|run|new|search ...   install and run skills (folders with a SKILL.md); try: skill examples
@@ -46,6 +55,7 @@ trash tree md5 shasum uuidgen brew man softwareupdate xcode-select caffeinate zi
 
 Every other name in the macOS catalog (python, node, gcc, clang, swift, xcodebuild, make, cmake, cargo,
 go, ruby, awk, sed, rsync, plutil, codesign ...) runs on a real Mac in the cloud automatically.
+Aliases you create with 'alias name=value' are saved and come back after restart ('unalias' removes them).
 Editors: nano/vi/vim <file> open a built-in editor. setup-storage grants access to ~/storage.
 TXT
     ;;

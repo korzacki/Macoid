@@ -38,6 +38,14 @@ for list in "$MACOID/lib/maccmds.txt" "$MACOID/lib/maccmds.extra"; do
   done
 done
 
+# 3b) commands added by saved cloud installs (pip/npm -g/gem/cargo/go/brew): run on the cloud, installs re-applied automatically
+if [ -f "$HOME/.macoid/cloudbins" ]; then
+  for n in $(cat "$HOME/.macoid/cloudbins"); do
+    case "$n" in *[!A-Za-z0-9_+.-]*|'') continue;; esac
+    command -v "$n" >/dev/null 2>&1 || eval "alias '$n=/system/bin/sh $MACOID/lib/shim.sh $n'"
+  done
+fi
+
 # 4) macOS-flavoured shell environment
 alias ll='ls -la'
 alias la='ls -A'
@@ -50,4 +58,40 @@ alias vi='vim' ; alias nano='vim'
 sudo() { "$@"; }
 export USER=macoid LOGNAME=macoid SHELL=/system/bin/sh HOSTNAME=macoid
 export EDITOR=vim VISUAL=vim PAGER=cat
+
+# 5) your own settings survive restarts: ~/.macoid/aliases.rc (written by 'alias') and ~/.macoid/user.rc (free-form, edit it yourself)
+mkdir -p "$HOME/.macoid" 2>/dev/null
+[ -f "$HOME/.macoid/aliases.rc" ] && . "$HOME/.macoid/aliases.rc"
+[ -f "$HOME/.macoid/user.rc" ] && . "$HOME/.macoid/user.rc"
+_macoid_alias_drop() {   # name -> remove its saved line
+  [ -f "$HOME/.macoid/aliases.rc" ] || return 0
+  : > "$HOME/.macoid/aliases.rc.new"
+  while IFS= read -r _l || [ -n "$_l" ]; do
+    case "$_l" in "alias '$1="*) ;; *) printf '%s\n' "$_l" >> "$HOME/.macoid/aliases.rc.new";; esac
+  done < "$HOME/.macoid/aliases.rc"
+  mv "$HOME/.macoid/aliases.rc.new" "$HOME/.macoid/aliases.rc"
+}
+_macoid_alias() {
+  if [ $# -eq 0 ]; then alias; return; fi
+  for _a in "$@"; do
+    case "$_a" in
+      -p) alias -p;;
+      *=*) alias "$_a" || continue
+           _n=${_a%%=*}; _q=$(printf '%s' "${_a#*=}" | sed "s/'/'\\\\''/g")
+           _macoid_alias_drop "$_n"
+           printf "alias '%s=%s'\n" "$_n" "$_q" >> "$HOME/.macoid/aliases.rc";;
+      *) alias "$_a";;
+    esac
+  done
+}
+_macoid_unalias() {
+  for _a in "$@"; do
+    case "$_a" in
+      -a) unalias -a; : > "$HOME/.macoid/aliases.rc";;
+      *) unalias "$_a" && _macoid_alias_drop "$_a";;
+    esac
+  done
+}
+alias unalias='_macoid_unalias'
+alias alias='_macoid_alias'
 cd "$HOME"

@@ -19,10 +19,15 @@ case "$1" in
           chmod +x "$HOME/.local/bin/$n"; echo "==> Installed script '$n' (restart the shell with ^C to use it)";;
         *) if [ -f "$MACOID/bin/$p" ]; then echo "$p: already built into Macoid"
            elif names | grep -qx -- "$p"; then echo "$p: nothing to install - it runs on a real Mac in the cloud when you call it"
-           else echo "Error: No available formula with the name \"$p\". Try a script URL: brew install https://.../tool.sh" >&2; fi;;
+           else /system/bin/sh "$MACOID/lib/shim.sh" brew install "$p"; fi;;
       esac
     done;;
-  uninstall|remove) shift; for p in "$@"; do rm -f "$HOME/.local/bin/$p" && echo "Uninstalled $p"; done;;
+  uninstall|remove) shift; . "$MACOID/lib/installs.sh"
+    for p in "$@"; do
+      if [ -f "$HOME/.local/bin/$p" ]; then rm -f "$HOME/.local/bin/$p"; echo "Uninstalled $p"
+      elif inst_remove "$p"; then echo "Uninstalled $p (restart the shell with ^C to drop its command)"
+      else echo "Error: No such keg: $p" >&2; fi
+    done;;
   update|upgrade|cleanup|doctor) echo "Your system is ready to brew.";;
   "") echo "usage: brew [--version|list|search|info|install|uninstall]";;
   *) echo "brew: '$1' is not supported in Macoid" >&2; exit 1;;
