@@ -24,8 +24,8 @@ esac
 # Local Linux first: instant (no runner, no upload, no wait). Installs of known tools happen on first use.
 if [ "${MACOID_LINUX:-1}" != 0 ] && [ -z "$MACOID_FORCE_CLOUD" ]; then
   . "$MACOID/lib/linux.sh"
-  if lx_ready && lx_has "$tool"; then lx_run "$tool" "$@"; exit $?; fi
-  if [ -n "$(lx_pkgs "$tool")" ] && lx_ensure "$tool"; then lx_run "$tool" "$@"; exit $?; fi
+  if lx_ready && lx_has "$tool"; then lx_run "$tool" "$@"; _rc=$?; lx_after "$tool" "$@"; exit $_rc; fi
+  if [ -n "$(lx_pkgs "$tool")" ] && lx_ensure "$tool"; then lx_run "$tool" "$@"; _rc=$?; lx_after "$tool" "$@"; exit $_rc; fi
 fi
 # Apple tools: fast replacements (plutil, lipo, sips ...) and the quick Linux runner for swift - see lib/apple.sh
 . "$MACOID/lib/apple.sh"

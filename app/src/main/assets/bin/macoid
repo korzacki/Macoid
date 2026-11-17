@@ -17,7 +17,7 @@ case "$sub" in
     d="$TMPDIR/sync.$$"; mkdir -p "$d"; ( cd "$d" && sh "$MACOID/bin/macoid" cloud --os macos --fetch --sh 'ls /bin /sbin /usr/bin /usr/sbin /usr/local/bin /opt/homebrew/bin 2>/dev/null | grep -E "^[A-Za-z0-9_+.-]+$" | sort -u > maccmds-synced.txt; wc -l maccmds-synced.txt' )
     if [ -s "$d/maccmds-synced.txt" ]; then
       { echo "# synced $(date +%F)"; tr '\n' ' ' < "$d/maccmds-synced.txt"; echo; } > "$MACOID/lib/maccmds.extra"
-      echo "[macoid] catalog now has $(count) names. Restart the shell (^C) to load them." >&2
+      echo "[macoid] catalog now has $(count) names. Open a new tab to load them." >&2
     else echo "sync failed: no list came back" >&2; fi
     rm -rf "$d";;
   installs)

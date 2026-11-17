@@ -113,7 +113,7 @@ cloud_cmd() {
     _un=$(uninstall_args "$@")
     if [ -n "$_un" ]; then
       for _p in $_un; do
-        if inst_remove "$_p"; then echo "Uninstalled $_p (removed from your saved installs; restart the shell with ^C to drop its command)"
+        if inst_remove "$_p"; then echo "Uninstalled $_p (removed from your saved installs)"
         else echo "$_p: not in your saved installs" >&2; fi
       done
       return 0
@@ -157,7 +157,7 @@ cloud_cmd() {
     _nb=$(tr '\n' ' ' < "$_bl" | tr -s ' ')
     inst_record "$_rec" "${_nb% }" "${_line# }"
     echo "[macoid] saved - this install will be re-applied automatically whenever you use it again (see: macoid installs)" >&2
-    [ -n "$_nb" ] && echo "[macoid] new commands: $_nb(restart the shell with ^C to use them)" >&2
+    [ -n "$_nb" ] && echo "[macoid] new commands: $_nb(ready to use now)" >&2
   fi
   rm -rf "$_snap" "$_out" "$_bl"
   return $_rc

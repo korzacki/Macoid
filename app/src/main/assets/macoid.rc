@@ -1,7 +1,11 @@
 # Macoid init (sourced by the app's shell at startup)
-export MACOID_VERSION=3.2
-export PATH="$HOME/.local/bin:$PATH"
-mkdir -p "$HOME/.local/bin" "$HOME/.Trash" 2>/dev/null
+export MACOID_VERSION=3.3
+# On PATH: your scripts, then Android's own tools, then launchers for everything installed in the local Linux ($MACOID/linux/wrap)
+# and for skill / cloud-install commands (~/.macoid/xbin). New installs show up here at once, no restart needed.
+export PATH="$HOME/.local/bin:$PATH:$MACOID/linux/wrap:$HOME/.macoid/xbin"
+mkdir -p "$HOME/.local/bin" "$HOME/.Trash" "$HOME/.macoid/xbin" 2>/dev/null
+# one-time upgrade from 3.2: build the launchers for what is already installed
+[ -f "$MACOID/linux/bins" ] && [ ! -d "$MACOID/linux/wrap" ] && ( . "$MACOID/lib/linux.sh" && lx_sync_bins ) >/dev/null 2>&1
 
 # root session = uid 0 (started from the app's "#" button or with 'tsu')
 if [ "$(id -u 2>/dev/null)" = 0 ]; then export USER=root LOGNAME=root MACOID_ROOT=1; else export USER=macoid LOGNAME=macoid; fi
@@ -41,7 +45,7 @@ for list in "$MACOID/lib/maccmds.txt" "$MACOID/lib/maccmds.extra"; do
   done
 done
 
-# 3b) commands added by saved cloud installs (pip/npm -g/gem/cargo/go/brew): run on the cloud, installs re-applied automatically
+# 3b) commands added by saved cloud installs (old 2.x state; new ones get a launcher in ~/.macoid/xbin)
 if [ -f "$HOME/.macoid/cloudbins" ]; then
   for n in $(cat "$HOME/.macoid/cloudbins"); do
     case "$n" in *[!A-Za-z0-9_+.-]*|'') continue;; esac
@@ -49,7 +53,7 @@ if [ -f "$HOME/.macoid/cloudbins" ]; then
   done
 fi
 
-# 3c) commands installed in the local Linux (pip/npm/apk/pkg ...): run through the Linux engine
+# 3c) fallback aliases for local-Linux commands that have no launcher yet (launchers in $MACOID/linux/wrap normally cover them)
 if [ -f "$MACOID/linux/bins" ]; then
   for n in $(cat "$MACOID/linux/bins"); do
     case "$n" in *[!A-Za-z0-9_+.-]*|'') continue;; esac

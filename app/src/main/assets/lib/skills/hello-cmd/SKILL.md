@@ -7,4 +7,4 @@ run: run.sh
 # hello-cmd
 
 Adds a `hello [name]` command. Everything in a skill's `bin/` folder becomes a command
-after you restart the shell (press ^C once). Use this folder as a template for your own skills.
+right after `skill install` (no restart needed). Use this folder as a template for your own skills.

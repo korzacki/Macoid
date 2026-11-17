@@ -4,18 +4,18 @@ CAT="$MACOID/lib/maccmds.txt"; EXTRA="$MACOID/lib/maccmds.extra"
 TOOLS="$HOME/.macoid/cloudtools"   # catalog commands the user "installed" (they run on the cloud Mac)
 mark_tool() { mkdir -p "$HOME/.macoid"; grep -qx -- "$1" "$TOOLS" 2>/dev/null || echo "$1" >> "$TOOLS"; }
 names() { cat "$CAT" $EXTRA 2>/dev/null | grep -v '^#' | tr -s ' ' '\n' | grep -E '^[A-Za-z0-9_+.-]+$' | sort -u; }
-# local install (Alpine Linux on the phone): instant, no GitHub runner. 0 = installed, 1 = no such package there
+# local install (Alpine Linux on the phone): instant, no GitHub runner.
+#   returns 0 = installed, 1 = no such package in Alpine, 2 = real error (no internet, engine will not start ...)
 brew_local() {
   . "$MACOID/lib/linux.sh"
   _n=${1%%@*}; _pk=$(lx_pkgs "$_n"); [ -n "$_pk" ] || _pk=$_n
-  lx_setup || return 1
-  _err="$TMPDIR/brew.err.$$"
+  lx_setup || return 2
   echo "==> Installing $_n (local, apk)" >&2
-  if _lx_proot /sbin/apk add --no-cache $_pk 2>"$_err"; then
-    rm -f "$_err"; lx_sync_bins
-    echo "==> $_n: installed. Run it after restarting the shell (^C), or right now with: lx $_n" >&2; return 0
+  if lx_apk_add $_pk; then
+    echo "==> $_n: installed and saved on this phone. It is ready to use now." >&2; return 0
   fi
-  rm -f "$_err"; return 1
+  [ "$LX_APK_MISSING" = 1 ] && return 1
+  return 2
 }
 
 case "$1" in
@@ -29,25 +29,39 @@ case "$1" in
         elif names | grep -qx -- "$2"; then echo "$2: macOS command, runs on a real Mac via the cloud runner (brew install $2 to mark it installed)"
         else echo "$2: not in the Macoid catalog"; fi;;
   install|reinstall)
-    shift; [ $# -eq 0 ] && die "usage: brew install <name | https://url/script.sh>"
+    shift; _brc=0
+    for p in "$@"; do case "$p" in -*) continue;; *) _any=1;; esac; done
+    [ -n "$_any" ] || die "usage: brew install <name | https://url/script.sh>"
     for p in "$@"; do
       case "$p" in
+        --cask|--casks) echo "brew: casks (GUI apps) are not supported on Android" >&2; _brc=1; break;;
+        -*) continue;;
         http://*|https://*) n=$(basename "$p" | sed 's/\.sh$//'); mkdir -p "$HOME/.local/bin"
-          /system/bin/sh "$MACOID/bin/wget" -q -O "$HOME/.local/bin/$n" "$p" || die "brew: download failed"
-          chmod +x "$HOME/.local/bin/$n"; echo "==> Installed script '$n' (restart the shell with ^C to use it)";;
-        *) if [ -f "$MACOID/bin/$p" ]; then echo "$p: already built into Macoid"
-           elif [ "${MACOID_LINUX:-1}" != 0 ] && brew_local "$p"; then :
-           elif names | grep -qx -- "$p"; then mark_tool "$p"; echo "==> $p: installed. It already exists on the cloud Mac, so just run '$p' (no download needed)"
-           else /system/bin/sh "$MACOID/lib/shim.sh" brew install "$p"; fi;;
+          /system/bin/sh "$MACOID/bin/wget" -q -O "$HOME/.local/bin/$n" "$p" || { echo "brew: download failed" >&2; _brc=1; continue; }
+          chmod +x "$HOME/.local/bin/$n"; echo "==> Installed script '$n' (ready to use now)";;
+        *) if [ -f "$MACOID/bin/$p" ]; then echo "$p: already built into Macoid"; continue; fi
+           _lr=1
+           if [ "${MACOID_LINUX:-1}" != 0 ]; then brew_local "$p"; _lr=$?; fi
+           case $_lr in
+             0) ;;
+             2) echo "brew: could not install '$p' on the phone (see the error above). Nothing was saved." >&2
+                echo "     Check your internet, then try again. 'pkg doctor' shows the state of the local Linux." >&2; _brc=1;;
+             *) # no such package in Alpine
+                if [ "${MACOID_CLOUD:-1}" = 0 ]; then echo "brew: no package named '$p' (try: brew search $p)" >&2; _brc=1
+                elif names | grep -qx -- "$p"; then mark_tool "$p"; echo "==> $p: not an Alpine package; it is a macOS command and runs on a real Mac via the cloud runner (just run '$p')"
+                else echo "==> '$p' is not in the local package index; trying a real Mac (slower)" >&2
+                     /system/bin/sh "$MACOID/lib/shim.sh" brew install "$p" || _brc=1; fi;;
+           esac;;
       esac
-    done;;
+    done
+    exit $_brc;;
   uninstall|remove) shift; . "$MACOID/lib/installs.sh"
     for p in "$@"; do
       if [ -f "$HOME/.local/bin/$p" ]; then rm -f "$HOME/.local/bin/$p"; echo "Uninstalled $p"
       elif grep -qx -- "$p" "$TOOLS" 2>/dev/null; then grep -vx -- "$p" "$TOOLS" > "$TOOLS.new"; mv "$TOOLS.new" "$TOOLS"; echo "Uninstalled $p"
       elif . "$MACOID/lib/linux.sh" && lx_ready && _lx_proot /sbin/apk info -e "$(lx_pkgs "$p" | cut -d' ' -f1 | grep . || echo "$p")" >/dev/null 2>&1; then
-        _lx_proot /sbin/apk del "$(lx_pkgs "$p" | cut -d' ' -f1 | grep . || echo "$p")" >/dev/null && { lx_sync_bins; echo "Uninstalled $p (restart the shell with ^C to drop its command)"; }
-      elif inst_remove "$p"; then echo "Uninstalled $p (restart the shell with ^C to drop its command)"
+        _lx_proot /sbin/apk del "$(lx_pkgs "$p" | cut -d' ' -f1 | grep . || echo "$p")" >/dev/null && { lx_sync_bins; echo "Uninstalled $p"; }
+      elif inst_remove "$p"; then echo "Uninstalled $p"
       else echo "Error: No such keg: $p" >&2; fi
     done;;
   update|upgrade|cleanup|doctor) echo "Your system is ready to brew.";;

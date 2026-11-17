@@ -1,4 +1,4 @@
-# Macoid 3.2 - a macOS-style terminal for Android (real PTY terminal, root-capable)
+# Macoid 3.3 - a macOS-style terminal for Android (real PTY terminal, root-capable)
 
 Macoid gives you a Mac-like shell on Android: real `git`, a GitHub CLI (`gh`), macOS commands
 (`open`, `pbcopy`, `defaults`, `sw_vers`, `sysctl`, `osascript`, ...), and a way to run **any other macOS
@@ -9,6 +9,8 @@ Info: Unpack workflow is for unpacking zip file that contains in the code, so if
 1. Push this folder to a GitHub repository or fork it (i'll give access).
 2. **Actions -> Build APK** -> download the `Macoid-apk` artifact (`app-debug.apk`) and install it
    (allow installs from unknown sources). Or open the folder in Android Studio and run *Build > Build APK*.
+3. Every build is signed with the same key (`app/macoid.keystore`), so you can install a new APK **over** the old one and
+   keep everything you installed. (If the app on your phone came from a build older than 3.3, uninstall it once first.)
 
 ## What runs where
 | Layer | What | Where it runs |
@@ -52,7 +54,7 @@ Skills are installable packages: a folder with a `SKILL.md` (front matter: `name
 scripts, and an optional `bin/` folder whose files become shell commands.
 ```
 skill examples                          # built-in skills
-skill install builtin:hello-cmd         # adds a `hello` command (restart the shell with ^C)
+skill install builtin:hello-cmd         # adds a `hello` command (works right away)
 skill install owner/repo                # from GitHub (repo may hold many skills), also owner/repo/subfolder
 skill install https://.../pack.zip      # or a local .zip / ./folder
 skill list | info <name> | run <name> [args] | update | remove <name>
@@ -73,6 +75,9 @@ npm i -g typescript
 lx                               # a Linux shell;  lx <cmd> runs one command there
 pkg doctor                       # status;  pkg reset --yes wipes the local Linux
 ```
+Installed commands work immediately (no shell restart): each one gets a launcher on `PATH`, like in Termux.
+Everything lives in the app's private storage (`$MACOID/linux`) and survives restarts and updates signed with the same key.
+The package index is cached and refreshed every 12 h, so a second install is mostly just the download of the package itself.
 Only tools that need a real Mac (xcodebuild, codesign, simctl ...) and `macoid build` still use GitHub Actions - see below.
 
 ## Apple tools, fast (3.2)

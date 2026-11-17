@@ -35,6 +35,9 @@ fetch() {
   esac
 }
 
+# drop the command launchers that belong to skill $1
+_skill_unlink() { for _l in "$HOME/.macoid/xbin"/*; do [ -f "$_l" ] && grep -q -F "'$SK/$1/bin/" "$_l" 2>/dev/null && rm -f "$_l"; done; return 0; }
+
 find_skills() { if [ -f "$1/SKILL.md" ]; then echo "$1"; else find "$1" -maxdepth 3 -name SKILL.md 2>/dev/null | while read f; do dirname "$f"; done; fi; }
 
 install_dir() {
@@ -42,11 +45,15 @@ install_dir() {
   n=$(field "$d/SKILL.md" name); [ -n "$n" ] || n=$(basename "$d")
   valid_name "$n" || { echo "skill: invalid name '$n' (letters, digits, - and _ only)" >&2; return 1; }
   rm -rf "$SK/$n"; cp -R "$d" "$SK/$n" || return 1
+  _skill_unlink "$n"
   rm -rf "$SK/$n/.git"
   printf '%s\n' "$src" > "$SK/$n/.source"
   chmod +x "$SK/$n"/bin/* "$SK/$n"/*.sh "$SK/$n"/scripts/* 2>/dev/null
   echo "Installed skill '$n' - $(field "$SK/$n/SKILL.md" description)"
-  [ -d "$SK/$n/bin" ] && echo "  adds commands: $(ls "$SK/$n/bin" | tr '\n' ' ')(restart the shell with ^C to use them)"
+  if [ -d "$SK/$n/bin" ]; then
+    for _f in "$SK/$n/bin"/*; do [ -f "$_f" ] || continue; xbin_add "${_f##*/}" '/system/bin/sh' "'$_f'" '"$@"'; done
+    echo "  adds commands: $(ls "$SK/$n/bin" | tr '\n' ' ')(ready to use now)"
+  fi
   return 0
 }
 
@@ -75,7 +82,7 @@ case "$cmd" in
     if [ $n -eq 0 ]; then echo "No skills installed. Try: skill examples   |   skill install builtin:hello-cmd   |   skill install owner/repo"; fi
     exit 0;;
   info|show) [ -f "$SK/$1/SKILL.md" ] || die "skill: '$1' is not installed"; cat "$SK/$1/SKILL.md"; if [ -f "$SK/$1/.source" ]; then echo; echo "(source: $(cat "$SK/$1/.source"))"; fi; exit 0;;
-  remove|rm|uninstall) [ -d "$SK/$1" ] || die "skill: '$1' is not installed"; rm -rf "$SK/${1:?}" && echo "Removed skill '$1' (restart the shell to drop its commands)";;
+  remove|rm|uninstall) [ -d "$SK/$1" ] || die "skill: '$1' is not installed"; rm -rf "$SK/${1:?}" && _skill_unlink "$1" && echo "Removed skill '$1'";;
   run)
     n=$1; [ -n "$n" ] || die "usage: skill run <name> [args...]"; shift
     d="$SK/$n"; [ -d "$d" ] || die "skill: '$n' is not installed"
@@ -111,7 +118,7 @@ skill - install and run Macoid skills (folders with a SKILL.md)
 A skill folder looks like:
   SKILL.md        ---\n name: my-skill\n description: one line\n run: run.sh\n ---   then free-form docs
   run.sh          what `skill run my-skill` executes  ($SKILL_DIR = the skill folder)
-  bin/            optional: every file here becomes a shell command after restarting the shell
+  bin/            optional: every file here becomes a shell command right after install
 Publish a skill by pushing the folder to GitHub (add the topic macoid-skill so others can find it).
 TXT
     ;;

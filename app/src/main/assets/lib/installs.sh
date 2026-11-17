@@ -1,3 +1,4 @@
+. "$MACOID/lib/common.sh"
 # Persistent state for tools that run on the cloud (macOS) runner.
 # Every cloud job starts on a blank machine, so "pip install x" would vanish right after it ran.
 # Instead we remember each successful install here and re-apply it before later commands that need it.
@@ -66,6 +67,7 @@ inst_record() {   # eco bins cmd
   for _b in $2; do
     case "$_b" in *[!A-Za-z0-9_+.-]*|'') continue;; esac
     grep -qx -- "$_b" "$BINS_FILE" 2>/dev/null || echo "$_b" >> "$BINS_FILE"
+    xbin_add "$_b" '/system/bin/sh "$MACOID/lib/shim.sh"' "$_b" '"$@"'
   done
 }
 
@@ -79,7 +81,7 @@ inst_remove() {   # package-name -> drops matching saved installs (and the comma
         _bins=${_l#*|}; _bins=${_bins%%|*}
         _bt="$BINS_FILE.new"; : > "$_bt"
         while IFS= read -r _x || [ -n "$_x" ]; do
-          case " $_bins " in *" $_x "*) ;; *) echo "$_x" >> "$_bt";; esac
+          case " $_bins " in *" $_x "*) rm -f "$MACOID_STATE/xbin/$_x";; *) echo "$_x" >> "$_bt";; esac
         done < "$BINS_FILE" 2>/dev/null
         mv "$_bt" "$BINS_FILE";;
       *) printf '%s\n' "$_l" >> "$_tmp";;

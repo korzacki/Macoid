@@ -11,6 +11,37 @@ All notable changes to Macoid are documented here.
 - Editor: floating header, rounded text card, a dot next to the file name when there are unsaved changes.
 - Shared styling lives in the new `Skin.kt`.
 
+## [3.3] - 2026-11-18
+
+### Fixed
+- **Installed packages "did not save" / commands missing after `brew install`.** Three causes, all fixed:
+  1. New commands were only registered when the shell started, and the "restart the shell with ^C" hint never worked
+     (^C does not restart anything). Every command installed in the local Linux now gets a tiny launcher in
+     `$MACOID/linux/wrap`, which is on `PATH`, so it works **immediately** - also inside scripts, pipes and `xargs`.
+  2. `pip install`, `npm i -g`, `cargo install`, `go install`, `gem install` ... never registered the commands they added.
+     Macoid now re-scans after every package-manager run.
+  3. `brew install` swallowed apk's error and, when the local install failed (for example no internet), still printed
+     "installed" and only marked the tool for the cloud. It now shows the real error, exits non-zero and saves nothing.
+     Only a genuine "no such package" falls back to the cloud Mac.
+- **App updates wiped everything.** Debug APKs built on GitHub Actions were signed with a random key each time, so Android
+  refused to update the app, the app had to be uninstalled, and the local Linux with all its packages went with it.
+  The build now uses a fixed key (`app/macoid.keystore`): install the new APK **over** the old one and your packages stay.
+- Skill commands (`skill install ...` with a `bin/` folder) and commands from cloud installs also work at once.
+  `skill remove` and `brew uninstall` drop their launchers.
+
+### Changed
+- **Faster installs.** The apk package index is kept on disk and refreshed at most every 12 h, instead of being downloaded
+  again for every install (`--no-cache`). A stale index is refreshed and the install retried automatically.
+- Clear error when the index cannot be downloaded ("check your internet") instead of a confusing "no such package".
+- `brew install` ignores flags such as `--formula` / `-q`, says casks are unsupported, and installs the rest when one name fails.
+- More package-name mappings (`rg`, `nvim`, `golang`, `openjdk`).
+- `pkg doctor` shows where everything is stored and how many commands are on PATH.
+
+### Upgrading
+- This is the first build with the fixed signing key. If the app was installed from an older build, Android will refuse the
+  update **once**: uninstall the old app, install this one, and from now on updates keep your data.
+- Existing 3.2 installs get their launchers built automatically the first time a shell starts.
+
 ## [3.2] - 2026-11-17
 
 ### Added

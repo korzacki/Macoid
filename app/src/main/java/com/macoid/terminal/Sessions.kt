@@ -92,7 +92,7 @@ object Sessions {
         fun onEmpty()
     }
 
-    const val VERSION = "3.1"
+    const val VERSION = "3.3"
     val list = ArrayList<TerminalSession>()
     private val roots = HashSet<TerminalSession>()
     var current = 0
