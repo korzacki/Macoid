@@ -72,8 +72,9 @@ case "$cmd" in
   list|ls|"")
     n=0; for d in "$SK"/*/; do [ -f "${d}SKILL.md" ] || continue; n=$((n+1)); b=$(basename "$d")
       printf '%-18s %s\n' "$b" "$(field "${d}SKILL.md" description)"; done
-    [ $n -eq 0 ] && { echo "No skills installed. Try: skill examples   |   skill install builtin:hello-cmd   |   skill install owner/repo"; };;
-  info|show) [ -f "$SK/$1/SKILL.md" ] || die "skill: '$1' is not installed"; cat "$SK/$1/SKILL.md"; [ -f "$SK/$1/.source" ] && echo && echo "(source: $(cat "$SK/$1/.source"))";;
+    if [ $n -eq 0 ]; then echo "No skills installed. Try: skill examples   |   skill install builtin:hello-cmd   |   skill install owner/repo"; fi
+    exit 0;;
+  info|show) [ -f "$SK/$1/SKILL.md" ] || die "skill: '$1' is not installed"; cat "$SK/$1/SKILL.md"; if [ -f "$SK/$1/.source" ]; then echo; echo "(source: $(cat "$SK/$1/.source"))"; fi; exit 0;;
   remove|rm|uninstall) [ -d "$SK/$1" ] || die "skill: '$1' is not installed"; rm -rf "$SK/${1:?}" && echo "Removed skill '$1' (restart the shell to drop its commands)";;
   run)
     n=$1; [ -n "$n" ] || die "usage: skill run <name> [args...]"; shift
