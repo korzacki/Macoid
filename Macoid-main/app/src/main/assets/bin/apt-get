@@ -1,3 +1,0 @@
-#!/system/bin/sh
-# apt-get - familiar verbs, handled by pkg (the local Linux underneath)
-exec /system/bin/sh "$MACOID/bin/pkg" "$@"
