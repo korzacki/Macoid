@@ -1,7 +1,0 @@
-#!/system/bin/sh
-# edit <file> - open the built-in editor (also reachable as nano / vi / vim). Works on root-only files when su exists.
-. "$MACOID/lib/common.sh"
-[ $# -eq 0 ] && die "usage: edit <file>"
-f=$1
-case "$f" in /*) ;; *) f="$PWD/$f";; esac
-bridge macoid.EDIT --es path "$f"

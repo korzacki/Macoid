@@ -1,4 +1,0 @@
-#!/system/bin/sh
-a=1; while [ $# -gt 0 ]; do case "$1" in -a) a=$2; shift 2;; -*) shift;; *) break;; esac; done
-case "$a" in 1) c=sha1sum;; 224) c=sha224sum;; 256) c=sha256sum;; 384) c=sha384sum;; 512) c=sha512sum;; *) echo "shasum: Unrecognized algorithm" >&2; exit 1;; esac
-if [ $# -eq 0 ]; then $c; else $c "$@"; fi

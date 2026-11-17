@@ -1,6 +1,0 @@
-#!/system/bin/sh
-f=$1; [ -e "$f" ] || { echo "$f: could not find $f." >&2; exit 1; }
-echo "kMDItemFSName           = \"$(basename "$f")\""
-echo "kMDItemFSSize           = $(stat -c %s "$f")"
-echo "kMDItemContentModificationDate = $(stat -c %y "$f")"
-echo "kMDItemKind             = \"$(file -b "$f" 2>/dev/null | head -c 60)\""

@@ -1,8 +1,0 @@
-#!/system/bin/sh
-case "$1" in
-  list|"") echo "/dev/disk0 (internal, physical):"; printf '   #:  TYPE NAME  SIZE  MOUNT\n'
-           df -h 2>/dev/null | tail -n +2 | grep -E '/data|/storage|/sdcard|/mnt' | while read fs size used avail pct mnt; do printf '   *:  APFS  %s  %s  %s\n' "${fs##*/}" "$size" "$mnt"; done;;
-  info) m=${2:-/data}; echo "   Mount Point: $m"; df -h "$m" 2>/dev/null | tail -n 1 | while read fs size used avail pct mnt; do echo "   Device Node: $fs"; echo "   Volume Total Space: $size"; echo "   Volume Used Space: $used"; echo "   Volume Free Space: $avail"; done;;
-  apfs) echo "APFS Containers: (emulated by Android storage)"; df -h /data;;
-  *) echo "usage: diskutil list | info [mountpoint]" >&2; exit 1;;
-esac

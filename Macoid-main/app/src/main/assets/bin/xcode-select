@@ -1,7 +1,0 @@
-#!/system/bin/sh
-case "$1" in
-  -p|--print-path) echo /Applications/Xcode.app/Contents/Developer;;
-  --install) echo "Xcode is not installed locally. Real Xcode runs in the cloud: try 'xcodebuild -version' or 'macoid build ios'.";;
-  --version|-v) echo "xcode-select version 2399 (Macoid cloud)";;
-  *) echo "usage: xcode-select -p | --install | --version" >&2; exit 1;;
-esac

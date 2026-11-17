@@ -1,4 +1,0 @@
-#!/system/bin/sh
-. "$MACOID/lib/common.sh"
-bridge macoid.SETUP_STORAGE
-echo "Requested storage access. Your shared storage is at ~/storage"
