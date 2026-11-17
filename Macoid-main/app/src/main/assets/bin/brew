@@ -1,0 +1,65 @@
+#!/system/bin/sh
+# brew - Homebrew-style front end. Formulae are installed into the real Linux on the phone (no GitHub runner, no cloud).
+. "$MACOID/lib/common.sh"
+. "$MACOID/lib/linux.sh"
+CAT="$MACOID/lib/maccmds.txt"; EXTRA="$MACOID/lib/maccmds.extra"
+names() { cat "$CAT" $EXTRA 2>/dev/null | grep -v '^#' | tr -s ' ' '\n' | grep -E '^[A-Za-z0-9_+.-]+$' | sort -u; }
+# local install: returns 0 = installed, 1 = no such package, 2 = real error (no internet, engine will not start ...)
+brew_local() {
+  _n=${1%%@*}
+  _pk=$(lx_pkgs "$_n"); [ -n "$_pk" ] || _pk=$_n
+  lx_setup || return 2
+  echo "==> Installing $_n ($LX_DISTRO)" >&2
+  if lx_pkg_add $_pk; then
+    echo "==> $_n: installed and saved on this phone. It is ready to use now." >&2; return 0
+  fi
+  [ "$LX_APK_MISSING" = 1 ] && return 1
+  return 2
+}
+
+case "$1" in
+  --version|-v) echo "Homebrew 4.2.0 (Macoid)"; echo "Homebrew/local: formulae install instantly into the Linux on this phone ($LX_DISTRO)";;
+  list|ls) { ls "$MACOID/bin" "$HOME/.local/bin" 2>/dev/null | grep -v ':'; lx_ready && lx_pkg_list 2>/dev/null | cut -d' ' -f1; } | sort -u;;
+  search) [ -z "$2" ] && die "usage: brew search <text>"; names | grep -i -- "$2"
+          lx_ready && lx_pkg_search "$2" 2>/dev/null | head -40;;
+  info) [ -z "$2" ] && die "usage: brew info <name>"
+        if [ -f "$MACOID/bin/$2" ]; then echo "$2: built into Macoid (runs locally)"
+        elif lx_ready && lx_has "$2"; then echo "$2: installed in the local Linux ($LX_DISTRO)"
+        elif [ -n "$(lx_pkgs "$2")" ]; then echo "$2: not installed yet; 'brew install $2' (or just run '$2') installs it: $(lx_pkgs "$2")"
+        else echo "$2: not a known command; try: brew search $2"; fi;;
+  install|reinstall)
+    shift; _brc=0
+    for p in "$@"; do case "$p" in -*) continue;; *) _any=1;; esac; done
+    [ -n "$_any" ] || die "usage: brew install <name | https://url/script.sh>"
+    for p in "$@"; do
+      case "$p" in
+        --cask|--casks) echo "brew: casks (GUI apps) are not supported on Android" >&2; _brc=1; break;;
+        -*) continue;;
+        http://*|https://*) n=$(basename "$p" | sed 's/\.sh$//'); mkdir -p "$HOME/.local/bin"
+          /system/bin/sh "$MACOID/bin/wget" -q -O "$HOME/.local/bin/$n" "$p" || { echo "brew: download failed" >&2; _brc=1; continue; }
+          chmod +x "$HOME/.local/bin/$n"; echo "==> Installed script '$n' (ready to use now)";;
+        *) if [ -f "$MACOID/bin/$p" ]; then echo "$p: already built into Macoid"; continue; fi
+           brew_local "$p"; _lr=$?
+           case $_lr in
+             0) ;;
+             2) echo "brew: could not install '$p' on the phone (see the error above). Nothing was saved." >&2
+                echo "     Check your internet, then try again. 'pkg doctor' shows the state of the local Linux." >&2; _brc=1;;
+             *) echo "brew: no package named '$p' in the $LX_DISTRO index (try: brew search $p)" >&2
+                case "$p" in xcodebuild|codesign|simctl|ibtool|actool) echo "     '$p' needs a real Mac and cannot run on a phone." >&2;; esac
+                _brc=1;;
+           esac;;
+      esac
+    done
+    exit $_brc;;
+  uninstall|remove) shift
+    for p in "$@"; do
+      if [ -f "$HOME/.local/bin/$p" ]; then rm -f "$HOME/.local/bin/$p"; echo "Uninstalled $p"
+      elif lx_ready; then
+        _pk=$(lx_pkgs "$p" | cut -d' ' -f1 | grep . || echo "$p")
+        if lx_pkg_installed "$_pk"; then lx_pkg_del "$_pk" >/dev/null && echo "Uninstalled $p"; else echo "Error: No such keg: $p" >&2; fi
+      else echo "Error: No such keg: $p" >&2; fi
+    done;;
+  update|upgrade|cleanup|doctor) echo "Your system is ready to brew.";;
+  "") echo "usage: brew [--version|list|search|info|install|uninstall]";;
+  *) echo "brew: '$1' is not supported in Macoid" >&2; exit 1;;
+esac

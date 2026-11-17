@@ -1,0 +1,77 @@
+#!/system/bin/sh
+. "$MACOID/lib/common.sh"
+sub=$1; [ $# -gt 0 ] && shift
+count() { cat "$MACOID/lib/maccmds.txt" "$MACOID/lib/maccmds.extra" 2>/dev/null | grep -v '^#' | tr -s ' ' '\n' | grep -E '^[A-Za-z0-9_+.-]+$' | sort -u | wc -l; }
+case "$sub" in
+  motd) echo "Welcome to Macoid $MACOID_VERSION - a macOS-style terminal for Android (real PTY terminal)."
+        echo "Type 'macoid help' for commands. Real git/gh built in; a real Linux (Debian) runs on the phone: pkg install / pip / python all work locally (pkg help)."
+        echo "Rooted phone? Use the # button (root session), 'tsu' (root shell) or 'sudo <cmd>'.";;
+  version|--version) echo "Macoid $MACOID_VERSION";;
+  build) . "$MACOID/lib/build.sh"; build_cmd "$@";;
+  cloud|sync-commands|installs)
+    echo "macoid: '$sub' is gone. Macoid 4.0 no longer uses GitHub runners or any cloud machine: everything runs in the real Linux on this phone (try: pkg help, lx)." >&2; exit 1;;
+  commands|list)
+    echo "Built in (run locally):"; ls "$MACOID/bin" "$HOME/.local/bin" 2>/dev/null | grep -v ':' | sort -u | tr '\n' ' '; echo; echo
+    echo "Known command names (installed in the local Linux on first use, or Apple stand-ins): $(count) - see 'brew search <text>'";;
+  root)
+    . "$MACOID/lib/root.sh"
+    case "$1" in
+      ""|status)
+        SU=$(root_su) || { echo "[--] su not found: this phone is not rooted"; exit 1; }
+        echo "[ok] su binary: $SU"
+        if [ "$(id -u)" = 0 ]; then echo "[ok] this shell is root ($(id))"
+        else
+          out=$("$SU" -c id 2>&1) && echo "[ok] root granted: $out" || echo "[!!] root denied or failed: $out"
+        fi;;
+      fixperms)
+        # files created as root inside the app folder can lock the normal shell out; give them back to the app user
+        [ -n "$MACOID_UID" ] || die "macoid root fixperms: MACOID_UID missing"
+        _sd="/system/bin/sh $MACOID/bin/sudo"; $_sd chown -R "$MACOID_UID:$MACOID_UID" "$MACOID" && { $_sd restorecon -R "$MACOID" 2>/dev/null; true; }; echo "Ownership of $MACOID reset to uid $MACOID_UID.";;
+      *) die "usage: macoid root [status|fixperms]";;
+    esac;;
+  doctor)
+    echo "Macoid $MACOID_VERSION"
+    [ -f "$MACOID_APK" ] && echo "[ok] APK classpath: $MACOID_APK" || echo "[!!] APK not found"
+    git --version >/dev/null 2>&1 && echo "[ok] git (JGit) works" || echo "[!!] git failed (JVM tools unavailable)"
+    gh auth status >/dev/null 2>&1 && echo "[ok] GitHub login" || echo "[--] not logged in to GitHub (gh auth login)"
+    . "$MACOID/lib/root.sh"; _su=$(root_su) && echo "[ok] su found: $_su (macoid root status to test)" || echo "[--] no su: not rooted (root features disabled)"
+    . "$MACOID/lib/linux.sh"
+    echo "[..] linux: $LX_DISTRO, arch $LX_GUEST (phone: ${LX_HOST:-unsupported CPU $(uname -m)})"
+    if lx_ready; then echo "[ok] real Linux ready on this phone - pkg/pip/npm/apt install instantly, no runner"
+    elif [ -x "$LXPROOT" ]; then echo "[--] Linux engine downloaded, root filesystem not unpacked yet (run: pkg setup)"
+    else echo "[--] Linux not set up yet (first pkg/pip/python use sets it up: ~30 MB download, once)"; fi
+    [ -f "$LXROOT/.macoid-base" ] && echo "[ok] base set installed (python, pip, git, curl, ssh)" || echo "[--] base set not installed yet (pkg setup)"
+    echo "[..] catalog size: $(count)";;
+  help|"")
+    cat <<'TXT'
+Macoid 4.0 - macOS-style terminal for Android, with a real Linux inside. Nothing runs on GitHub runners or any cloud.
+
+  git ...                 real git (clone, commit, push, pull, branch, merge, rebase, stash, tag ...)
+  gh auth login           log in to GitHub with a token, then: gh repo|issue|pr|run|workflow|release|api ...
+  lx [cmd ...]            open a shell in the real Linux on the phone (Debian by default), or run one command there
+  lx distro [debian|alpine]            show / switch the Linux distro
+  lx arch [arm64|arm|x86_64|default]   show / choose the CPU architecture of the Linux
+  pkg install <name...>   install software, instantly, in that Linux (python, pip, node, gcc, ffmpeg, jq ...)
+                          also: pkg remove|search|list|update|upgrade|setup|shell|doctor, apt, apt-get, apk (Alpine), brew install ...
+  python / pip / npm / yarn / pnpm / gem / cargo / go    run locally and install on first use (pip install requests)
+  macoid build [target]   compile your project on the phone (node python go rust cmake maven gradle-java) into ./build-output
+  macoid root [status|fixperms]   check su access / repair file ownership after working as root
+  macoid commands|doctor|version
+  skill install|list|run|new|search ...   install and run skills (folders with a SKILL.md); try: skill examples
+
+macOS-style commands run locally: open pbcopy pbpaste say afplay osascript defaults sw_vers sysctl
+system_profiler scutil pmset ioreg vm_stat diskutil ifconfig networksetup launchctl mdfind mdls ditto
+trash tree md5 shasum uuidgen brew man softwareupdate xcode-select caffeinate zip unzip curl wget host dig
+
+Developer tools (python, node, gcc, clang, make, cmake, cargo, go, ruby, awk, rsync, ssh, tmux, htop ...) run in the Linux on
+the phone and are installed on first use. Apple tools plutil, PlistBuddy, lipo, otool, install_name_tool, dwarfdump and sips
+run on the phone too. xcodebuild, codesign, simctl ... need a real Mac and are not available. MACOID_LINUX=0 switches the Linux off.
+Aliases you create with 'alias name=value' are saved and come back after restart ('unalias' removes them).
+Root (rooted phones only): '+' tab = normal shell, '#' tab = root shell via su. In a normal shell: tsu (root shell),
+sudo <cmd> (one command as root). The root shell has its own home (root-home); 'macoid root fixperms' repairs ownership.
+Editors: nano/vi/vim/edit <file> open a built-in editor (root-aware). setup-storage grants access to ~/storage.
+This is a real terminal: top, vim-style full-screen programs, colours, Ctrl-keys and arrow keys all work.
+TXT
+    ;;
+  *) echo "macoid: unknown command '$sub'. Try: macoid help" >&2; exit 1;;
+esac

@@ -1,0 +1,107 @@
+# Macoid init (sourced by the app's shell at startup)
+export MACOID_VERSION=4.0
+# On PATH: your scripts, then Android's own tools, then launchers for everything installed in the real Linux on the phone
+# ($MACOID/linux/wrap) and for skill commands (~/.macoid/xbin). New installs show up here at once, no restart needed.
+export PATH="$HOME/.local/bin:$PATH:$MACOID/linux/wrap:$HOME/.macoid/xbin"
+mkdir -p "$HOME/.local/bin" "$HOME/.Trash" "$HOME/.macoid/xbin" 2>/dev/null
+# one-time upgrade from 3.2: build the launchers for what is already installed
+[ -f "$MACOID/linux/bins" ] && [ ! -d "$MACOID/linux/wrap" ] && ( . "$MACOID/lib/linux.sh" && lx_sync_bins ) >/dev/null 2>&1
+
+# root session = uid 0 (started from the app's "#" button or with 'tsu')
+if [ "$(id -u 2>/dev/null)" = 0 ]; then export USER=root LOGNAME=root MACOID_ROOT=1; else export USER=macoid LOGNAME=macoid; fi
+
+# 1) every script in $MACOID/bin becomes a command (functions dodge exec restrictions; names with - or . become aliases)
+for f in "$MACOID"/bin/*; do
+  n=${f##*/}
+  case "$n" in
+    *[-.]*) eval "alias '$n=/system/bin/sh $MACOID/bin/$n'";;
+    *) eval "$n() { /system/bin/sh \"$MACOID/bin/$n\" \"\$@\"; }";;
+  esac
+done
+
+# 2) user scripts in ~/.local/bin
+for f in "$HOME"/.local/bin/*; do
+  [ -f "$f" ] || continue
+  n=${f##*/}
+  case "$n" in *[-.]*) ;; *) eval "$n() { /system/bin/sh \"$f\" \"\$@\"; }";; esac
+done
+
+# 2b) commands shipped by installed skills (~/.macoid/skills/<name>/bin)
+for d in "$HOME"/.macoid/skills/*/bin; do
+  [ -d "$d" ] || continue
+  for f in "$d"/*; do
+    [ -f "$f" ] || continue
+    n=${f##*/}
+    case "$n" in *[-.]*) eval "alias '$n=/system/bin/sh $f'";; *) eval "$n() { /system/bin/sh \"$f\" \"\$@\"; }";; esac
+  done
+done
+
+# 3) command catalog: each name is a launcher that runs the command in the real Linux on the phone (installing it on first use)
+for list in "$MACOID/lib/maccmds.txt" "$MACOID/lib/maccmds.extra"; do
+  [ -f "$list" ] || continue
+  for n in $(grep -v '^#' "$list" | tr -s ' ' '\n'); do
+    case "$n" in *[!A-Za-z0-9_+.-]*|'') continue;; esac
+    command -v "$n" >/dev/null 2>&1 || eval "alias '$n=/system/bin/sh $MACOID/lib/shim.sh $n'"
+  done
+done
+
+# 3b) fallback aliases for local-Linux commands that have no launcher yet (launchers in $MACOID/linux/wrap normally cover them)
+if [ -f "$MACOID/linux/bins" ]; then
+  for n in $(cat "$MACOID/linux/bins"); do
+    case "$n" in *[!A-Za-z0-9_+.-]*|'') continue;; esac
+    command -v "$n" >/dev/null 2>&1 || eval "alias '$n=/system/bin/sh $MACOID/lib/shim.sh $n'"
+  done
+fi
+
+# 4) macOS-flavoured shell environment
+unalias vi vim nano pico less more top sudo 2>/dev/null
+alias ll='ls -la'
+alias la='ls -A'
+alias l='ls -CF'
+alias neofetch='macfetch'
+alias less='cat'
+alias more='cat'
+alias vi='edit' ; alias vim='edit' ; alias nano='edit' ; alias pico='edit'
+# sudo = run one command as root through su (needs a rooted phone); already root -> just run it
+sudo() { if [ "$(id -u)" = 0 ]; then "$@"; else /system/bin/sh "$MACOID/bin/sudo" "$@"; fi; }
+export SHELL=/system/bin/sh HOSTNAME=macoid
+export EDITOR=edit VISUAL=edit PAGER=cat
+export HISTFILE="$HOME/.mksh_history" HISTSIZE=2000
+set -o emacs 2>/dev/null
+if [ "$(id -u)" = 0 ]; then PS1='macoid(root):${PWD:-?} # '; else PS1='macoid:${PWD:-?} $ '; fi
+
+# 5) your own settings survive restarts: ~/.macoid/aliases.rc (written by 'alias') and ~/.macoid/user.rc (free-form, edit it yourself)
+mkdir -p "$HOME/.macoid" 2>/dev/null
+[ -f "$HOME/.macoid/aliases.rc" ] && . "$HOME/.macoid/aliases.rc"
+[ -f "$HOME/.macoid/user.rc" ] && . "$HOME/.macoid/user.rc"
+_macoid_alias_drop() {   # name -> remove its saved line
+  [ -f "$HOME/.macoid/aliases.rc" ] || return 0
+  : > "$HOME/.macoid/aliases.rc.new"
+  while IFS= read -r _l || [ -n "$_l" ]; do
+    case "$_l" in "alias '$1="*) ;; *) printf '%s\n' "$_l" >> "$HOME/.macoid/aliases.rc.new";; esac
+  done < "$HOME/.macoid/aliases.rc"
+  mv "$HOME/.macoid/aliases.rc.new" "$HOME/.macoid/aliases.rc"
+}
+_macoid_alias() {
+  if [ $# -eq 0 ]; then alias; return; fi
+  for _a in "$@"; do
+    case "$_a" in
+      -p) alias -p;;
+      *=*) alias "$_a" || continue
+           _n=${_a%%=*}; _q=$(printf '%s' "${_a#*=}" | sed "s/'/'\\\\''/g")
+           _macoid_alias_drop "$_n"
+           printf "alias '%s=%s'\n" "$_n" "$_q" >> "$HOME/.macoid/aliases.rc";;
+      *) alias "$_a";;
+    esac
+  done
+}
+_macoid_unalias() {
+  for _a in "$@"; do
+    case "$_a" in
+      -a) unalias -a; : > "$HOME/.macoid/aliases.rc";;
+      *) unalias "$_a" && _macoid_alias_drop "$_a";;
+    esac
+  done
+}
+alias unalias='_macoid_unalias'
+alias alias='_macoid_alias'

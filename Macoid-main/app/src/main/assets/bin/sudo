@@ -1,0 +1,14 @@
+#!/system/bin/sh
+# sudo <command...> - run one command as root through su (rooted phones only)
+. "$MACOID/lib/common.sh"
+. "$MACOID/lib/root.sh"
+[ $# -eq 0 ] && exec /system/bin/sh "$MACOID/bin/tsu"
+if [ "$(id -u)" = 0 ]; then . "$MACOID/macoid.rc"; "$@"; exit $?; fi
+root_need sudo
+ef=$(root_envfile)
+cwd=$(printf '%s' "$PWD" | sed "s/'/'\\\\''/g")
+cmd=$(root_quote "$@")
+"$SU" -c ". '$ef'; . \"\$MACOID/macoid.rc\"; cd '$cwd' 2>/dev/null; $cmd"
+rc=$?
+rm -f "$ef"
+exit $rc

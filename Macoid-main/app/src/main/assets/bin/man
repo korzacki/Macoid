@@ -1,0 +1,9 @@
+#!/system/bin/sh
+[ -z "$1" ] && { echo "What manual page do you want?" >&2; exit 1; }
+c=$1
+if "$c" --help >/dev/null 2>&1 && ! alias "$c" >/dev/null 2>&1; then "$c" --help 2>&1 | head -n 80; exit 0; fi
+# a real manual page from the local Linux (man-db installs on first use)
+. "$MACOID/lib/linux.sh"
+if [ "${MACOID_LINUX:-1}" != 0 ] && [ "$LX_DISTRO" = debian ] && lx_ensure man; then lx_run man "$@"; exit $?; fi
+if [ "${MACOID_LINUX:-1}" != 0 ] && "$MACOID/bin/lx" "$c" --help >/dev/null 2>&1; then "$MACOID/bin/lx" "$c" --help 2>&1 | head -n 80; exit 0; fi
+echo "man: no manual entry for $c" >&2; exit 1

@@ -1,0 +1,4 @@
+#!/system/bin/sh
+. "$MACOID/lib/common.sh"
+[ -f "$1" ] || die "afplay: $1: No such file"
+bridge macoid.PLAY --es path "$(realpath "$1")"

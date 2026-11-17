@@ -1,0 +1,2 @@
+#!/system/bin/sh
+case "$(uname -m)" in aarch64|arm64) echo arm64;; x86_64) echo i386;; *) uname -m;; esac

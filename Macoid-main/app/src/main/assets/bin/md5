@@ -1,0 +1,2 @@
+#!/system/bin/sh
+for f in "$@"; do case "$f" in -*) continue;; esac; echo "MD5 ($f) = $(md5sum "$f" | cut -d' ' -f1)"; done
