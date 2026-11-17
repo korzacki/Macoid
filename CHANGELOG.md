@@ -2,6 +2,31 @@
 
 All notable changes to Macoid are documented here.
 
+## [3.1] - 2026-11-17
+
+### Added
+- **Fast local installer (no GitHub runner).** `pkg`, `apk`, `apt`, `apt-get`, `brew install`, `pip`, `pip3`, `pipx`, `uv`,
+  `npm`, `yarn`, `pnpm`, `gem`, `cargo`, `go` now install and run **on the phone** inside a small Alpine Linux
+  (proot). Nothing is uploaded, nothing waits in a queue and no VM boots: an install takes seconds, and installed
+  packages simply stay there between sessions (no cache files, no replaying).
+- One-time setup on first use (~1 MB engine + ~3.5 MB Alpine, downloaded automatically). `pkg doctor` shows the state,
+  `pkg reset --yes` wipes it.
+- `pkg install|remove|search|list|info|update|upgrade|shell`, `lx` (Linux shell / run one command there), `apk` (raw).
+- Known tools install themselves on first use: running `python`, `pip`, `node`, `npm`, `ruby`, `cargo`, `go`, `gcc`,
+  `make`, `cmake`, `ssh`, `tmux`, `htop`, `rsync` ... fetches the package with apk, then runs it.
+- Interactive REPLs (`python`, `node`, `irb`) and full-screen programs (`tmux`, `htop`, `ssh`) work now, because they run
+  locally on the real PTY terminal.
+
+### Changed
+- The macOS-command shim tries the local Linux first; only macOS-only tools (swift, xcodebuild, plutil, codesign ...)
+  and explicit `macoid cloud` / `macoid build` still use a GitHub Actions runner. `MACOID_LINUX=0` forces the old behaviour.
+- `brew install <name>` installs from the Alpine index first and falls back to the cloud Mac only if there is no such package.
+
+### Notes
+- Packages are Alpine (musl) packages, not Homebrew bottles or macOS binaries; Darwin-only software still needs the cloud.
+- Needs a 64-bit (arm64) or 32-bit ARM / x86_64 phone with internet on the first run. Written without a device at hand:
+  if the engine does not start on a phone, `pkg doctor` says what is missing.
+
 ## [3.0] - 2026-11-17
 
 ### Added

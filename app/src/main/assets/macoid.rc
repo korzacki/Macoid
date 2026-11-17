@@ -1,5 +1,5 @@
 # Macoid init (sourced by the app's shell at startup)
-export MACOID_VERSION=3.0
+export MACOID_VERSION=3.1
 export PATH="$HOME/.local/bin:$PATH"
 mkdir -p "$HOME/.local/bin" "$HOME/.Trash" 2>/dev/null
 
@@ -44,6 +44,14 @@ done
 # 3b) commands added by saved cloud installs (pip/npm -g/gem/cargo/go/brew): run on the cloud, installs re-applied automatically
 if [ -f "$HOME/.macoid/cloudbins" ]; then
   for n in $(cat "$HOME/.macoid/cloudbins"); do
+    case "$n" in *[!A-Za-z0-9_+.-]*|'') continue;; esac
+    command -v "$n" >/dev/null 2>&1 || eval "alias '$n=/system/bin/sh $MACOID/lib/shim.sh $n'"
+  done
+fi
+
+# 3c) commands installed in the local Linux (pip/npm/apk/pkg ...): run through the Linux engine
+if [ -f "$MACOID/linux/bins" ]; then
+  for n in $(cat "$MACOID/linux/bins"); do
     case "$n" in *[!A-Za-z0-9_+.-]*|'') continue;; esac
     command -v "$n" >/dev/null 2>&1 || eval "alias '$n=/system/bin/sh $MACOID/lib/shim.sh $n'"
   done

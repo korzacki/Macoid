@@ -1,0 +1,7 @@
+#!/system/bin/sh
+# apk - Alpine's own package manager, straight through
+. "$MACOID/lib/linux.sh"
+lx_setup || exit 1
+_lx_proot /sbin/apk "$@"; rc=$?
+case "$1" in add|del|upgrade|fix) lx_sync_bins;; esac
+exit $rc

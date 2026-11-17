@@ -63,6 +63,18 @@ Built-ins: `hello-cmd` (template), `repo-backup` (zip the current folder to ~/st
 (cloud-build an Android project and copy the APK to ~/storage/Download). Publish a skill by pushing its folder to GitHub.
 Macoid has no AI model on the phone, so a skill here is an installable command package, not a prompt.
 
+## Fast installer (3.1)
+Installs no longer go through a GitHub runner. `pkg`, `apk`, `apt`, `brew install`, `pip`, `npm`, `gem`, `cargo`, `go`
+run in a small Alpine Linux on the phone (proot), so they finish in seconds and stay installed.
+```
+pkg install python ffmpeg jq     # or: apk add ... / apt install ... / brew install ...
+pip install requests             # local pip, installs python on first use
+npm i -g typescript
+lx                               # a Linux shell;  lx <cmd> runs one command there
+pkg doctor                       # status;  pkg reset --yes wipes the local Linux
+```
+macOS-only tools (swift, xcodebuild, plutil, codesign ...) and `macoid build` still use GitHub Actions.
+
 ## Root
 Macoid cannot root a phone - it uses `su` on a phone that is **already rooted** (Magisk, KernelSU, APatch ...).
 * `#` button: new root session (approve the su prompt). `tsu`: root shell from a normal tab. `sudo <cmd>`: one command as root.
@@ -78,8 +90,9 @@ Macoid cannot root a phone - it uses `su` on a phone that is **already rooted** 
 ## Limits (honest list)
 * This is an emulation layer on Android's shell - not macOS. Binaries for Darwin cannot run on the phone; they run in the cloud.
 * The terminal is real, but Android ships no vim/nano/less/python: those names are an editor screen, `cat`, or cloud commands.
-  Termux packages cannot be installed (they are built for another prefix). Pipelines into cloud commands are not supported.
-* No SSH client; no GUI apps.
+  Termux packages cannot be installed (they are built for another prefix) - use `pkg install` instead (Alpine packages, local).
+  Pipelines into *cloud* commands are not supported (local Linux commands accept pipes).
+* No GUI apps. SSH works after `pkg install openssh-client` (or just run `ssh`).
 * The Kotlin sources for git/gh were written without access to an Android SDK/JGit in the authoring environment; the first
   GitHub Actions build is the compile check.
 

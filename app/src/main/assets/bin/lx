@@ -1,0 +1,15 @@
+#!/system/bin/sh
+# lx - run a command (or open a shell) inside the local Linux.   lx            -> shell
+#                                                                  lx <cmd> ... -> run <cmd> there
+. "$MACOID/lib/linux.sh"
+if [ $# -eq 0 ]; then
+  lx_setup || exit 1
+  lx_run env 'PS1=linux:${PWD} # ' /bin/sh -l
+  exit $?
+fi
+case "$1" in
+  -c) shift; lx_setup || exit 1; lx_run /bin/sh -c "$@"; exit $?;;
+esac
+_t=$1
+lx_has "$_t" 2>/dev/null || lx_ensure "$_t" || true
+lx_run "$@"

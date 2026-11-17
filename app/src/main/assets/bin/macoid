@@ -4,7 +4,7 @@ sub=$1; [ $# -gt 0 ] && shift
 count() { cat "$MACOID/lib/maccmds.txt" "$MACOID/lib/maccmds.extra" 2>/dev/null | grep -v '^#' | tr -s ' ' '\n' | grep -E '^[A-Za-z0-9_+.-]+$' | sort -u | wc -l; }
 case "$sub" in
   motd) echo "Welcome to Macoid $MACOID_VERSION - a macOS-style terminal for Android (real PTY terminal)."
-        echo "Type 'macoid help' for commands. Real git/gh built in; other Mac commands run on a real Mac in the cloud."
+        echo "Type 'macoid help' for commands. Real git/gh built in; pip/npm/apk/brew install instantly on the phone (pkg help)."
         echo "Rooted phone? Use the # button (root session), 'tsu' (root shell) or 'sudo <cmd>'.";;
   version|--version) echo "Macoid $MACOID_VERSION";;
   cloud) . "$MACOID/lib/cloud.sh"; cloud_cmd "$@";;
@@ -50,6 +50,10 @@ case "$sub" in
     git --version >/dev/null 2>&1 && echo "[ok] git (JGit) works" || echo "[!!] git failed (JVM tools unavailable)"
     gh auth status >/dev/null 2>&1 && echo "[ok] GitHub login" || echo "[--] not logged in to GitHub (gh auth login)"
     . "$MACOID/lib/root.sh"; _su=$(root_su) && echo "[ok] su found: $_su (macoid root status to test)" || echo "[--] no su: not rooted (root features disabled)"
+    . "$MACOID/lib/linux.sh"
+    if lx_ready; then echo "[ok] local Linux (Alpine) ready - pkg/pip/npm/apk install instantly"
+    elif [ -x "$LXPROOT" ]; then echo "[--] Linux engine downloaded, Alpine not unpacked yet (run: pkg setup)"
+    else echo "[--] local Linux not set up yet (first pkg/pip/npm install sets it up, ~5 MB)"; fi
     echo "[..] catalog size: $(count)";;
   help|"")
     cat <<'TXT'
@@ -62,7 +66,11 @@ Macoid - macOS-style terminal for Android
                           swift, flutter-apk, gradle-java, maven, node, electron, python, go, rust,
                           cmake, dotnet) and download the result into ./build-output
   macoid cloud [--os macos|ubuntu|windows] [--fetch] -- <cmd...>   run any command on a real runner
-  macoid installs         list what you installed (pip/npm -g/gem/cargo/go/brew) - saved and re-applied automatically
+  pkg install <name...>   install software ON THE PHONE, instantly (local Alpine Linux, no GitHub runner)
+                          also: pkg remove|search|list|update|upgrade|shell|doctor, apk, apt, apt-get, brew install
+  pip / npm / yarn / pnpm / gem / cargo / go    run locally and install on first use (pip install requests)
+  lx [cmd ...]            open a Linux shell, or run one command inside the local Linux
+  macoid installs         (legacy cloud installs) list what was installed on the cloud Mac
   macoid sync-commands    pull the real command list from a Mac (extends the catalog)
   macoid root [status|fixperms]   check su access / repair file ownership after working as root
   macoid commands|doctor|version
@@ -72,8 +80,9 @@ macOS-style commands run locally: open pbcopy pbpaste say afplay osascript defau
 system_profiler scutil pmset ioreg vm_stat diskutil ifconfig networksetup launchctl mdfind mdls ditto
 trash tree md5 shasum uuidgen brew man softwareupdate xcode-select caffeinate zip unzip curl wget host dig
 
-Every other name in the macOS catalog (python, node, gcc, clang, swift, xcodebuild, make, cmake, cargo,
-go, ruby, awk, sed, rsync, plutil, codesign ...) runs on a real Mac in the cloud automatically.
+Developer tools from the catalog (python, node, gcc, clang, make, cmake, cargo, go, ruby, awk, rsync, ssh,
+tmux, htop ...) run locally in the on-phone Linux, installed on first use. Only macOS-only tools (swift,
+xcodebuild, plutil, codesign ...) still run on a real Mac in the cloud. Set MACOID_LINUX=0 to force the cloud.
 Aliases you create with 'alias name=value' are saved and come back after restart ('unalias' removes them).
 Root (rooted phones only): '+' tab = normal shell, '#' tab = root shell via su. In a normal shell: tsu (root shell),
 sudo <cmd> (one command as root). The root shell has its own home (root-home); 'macoid root fixperms' repairs ownership.
