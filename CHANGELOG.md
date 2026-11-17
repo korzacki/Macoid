@@ -12,6 +12,13 @@ All notable changes to Macoid are documented here.
 - If the cached file is missing or fails to restore, Macoid falls back to replaying the saved install commands (2.1).
 - Cloud workflow now has `contents: write` permission and a `GH_TOKEN`, needed to store the cached environment.
 
+### Changed
+- `pip install`, `npm -g` and other installs no longer upload your folder to the runner unless the command points
+  to a local file (`-r requirements.txt`, `-e .`, `./pkg`). This removes most of the wait before an install starts.
+- When you run a command from the home folder (`~`), only loose files are uploaded, not every folder in it.
+- The git upload log (object counting/compressing, "Create a pull request" hint) is hidden; it is shown only if the
+  upload fails. The two "running on a real Mac" lines were merged into one.
+
 ### Security
 - Macoid now refuses to run a job if `<you>/macoid-cloud` is public (it receives your project files and cached
   installs). Make it private or delete it; override with `MACOID_ALLOW_PUBLIC=1`.

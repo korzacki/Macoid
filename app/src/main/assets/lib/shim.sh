@@ -13,5 +13,4 @@ case "$tool" in
     [ $# -eq 0 ] && { echo "$tool: the interactive REPL is not supported. Run a script (e.g. $tool file) or use -c/-e." >&2; exit 126; };;
 esac
 . "$MACOID/lib/cloud.sh"
-echo "[macoid] running '$tool' on a real Mac (GitHub Actions). Disable with MACOID_CLOUD=0" >&2
 cloud_cmd --os "${MACOID_CLOUD_OS:-macos}" --fetch -- "$tool" "$@"

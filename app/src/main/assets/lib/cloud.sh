@@ -2,10 +2,13 @@
 # Requires: gh auth login (token with repo + workflow scopes)
 . "$MACOID/lib/installs.sh"
 
-cloud_snapshot() {   # copy the current dir into $1 without dotfiles/secrets
+cloud_snapshot() {   # copy the current dir into $1 without dotfiles/secrets; $2=0 -> copy nothing
   _d=$1; mkdir -p "$_d"
+  [ "${2:-1}" = 0 ] && return 0
   for _f in ./* ./.github ./.gitignore ./.gitattributes ./.editorconfig; do
     [ -e "$_f" ] || continue
+    # the home folder is not a project: only send loose files, not every folder in it
+    [ "$PWD" = "$HOME" ] && [ ! -f "$_f" ] && continue
     _n=${_f#./}
     case "$_n" in storage|build-output|.macoid-out|'*') continue;; esac
     # keep node_modules (so "npm install" survives between runs) unless it is huge
@@ -37,9 +40,12 @@ cloud_submit() {
     return 1
   fi
   _br="job-$(date +%s)"
+  _gl="$TMPDIR/gitout.$$"
   ( cd "$_snap" && rm -rf .git && git init -q && git config user.name macoid && git config user.email macoid@users.noreply.github.com \
     && git add -A && git commit -q -m "macoid job $_br" && git remote add origin "https://github.com/$_repo.git" \
-    && git push -q --force origin "HEAD:refs/heads/$_br" ) || { echo "macoid: could not push job to $_repo" >&2; return 1; }
+    && git push -q --force origin "HEAD:refs/heads/$_br" ) > "$_gl" 2>&1 \
+    || { cat "$_gl" >&2; rm -f "$_gl"; echo "macoid: could not push job to $_repo" >&2; return 1; }
+  rm -f "$_gl"
   _rid=$(gh run latest -R "$_repo" --branch "$_br" --wait 90) || { echo "macoid: no workflow run started (is Actions enabled for $_repo?)" >&2; return 1; }
   echo "[macoid] run https://github.com/$_repo/actions/runs/$_rid" >&2
   _log="$TMPDIR/cloudlog.$$"
@@ -120,7 +126,13 @@ cloud_cmd() {
   case "$_os" in macos) _runner=macos-latest;; ubuntu|linux) _runner=ubuntu-latest;; windows) _runner=windows-latest;; *) echo "unknown --os $_os" >&2; return 2;; esac
   [ "$_os" = macos ] || { _rec=""; _eco=""; }
   _snap="$TMPDIR/cloud.$$"; rm -rf "$_snap"; mkdir -p "$_snap/.macoid" "$_snap/.github/workflows"
-  cloud_snapshot "$_snap" || return 1
+  # an install only needs your folder when it refers to a local file (-r requirements.txt, -e ., ./pkg ...)
+  _files=1
+  if [ -n "$_rec" ]; then
+    _files=0
+    for _a in "$@"; do [ -e "$_a" ] && _files=1; done
+  fi
+  cloud_snapshot "$_snap" "$_files" || return 1
   [ -f "$INST_FILE" ] && cp "$INST_FILE" "$_snap/.macoid/installs.tsv"
   cp "$MACOID/lib/runner-env.sh" "$_snap/.macoid/runner-env.sh"
   _qt=$(printf '%s' "$_tool" | sed "s/'/'\\\\''/g")
@@ -133,7 +145,7 @@ cloud_cmd() {
     _cloud_post
   } > "$_snap/.macoid/cmd.sh"
   sed "s/__RUNNER__/$_runner/" "$MACOID/templates/cloud-exec.yml" > "$_snap/.github/workflows/macoid.yml"
-  echo "[macoid] running on a GitHub $_runner runner..." >&2
+  echo "[macoid] running ${_tool:-your command} on a real Mac (GitHub $_runner). Disable with MACOID_CLOUD=0" >&2
   _out=""; [ "$_fetch" = 1 ] && _out="$TMPDIR/cloudout.$$"
   _bl="$TMPDIR/binlog.$$"; : > "$_bl"
   [ -n "$_rec" ] && MACOID_BINLOG=$_bl || MACOID_BINLOG=""
