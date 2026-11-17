@@ -1,0 +1,10 @@
+build/
+.gradle/
+local.properties
+*.apk
+build-output/
+
+tools/work/
+tools/dist/
+work/
+dist/

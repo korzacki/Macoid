@@ -1,0 +1,25 @@
+#!/system/bin/sh
+. "$MACOID/lib/common.sh"
+hw() { echo "Hardware:"; echo; echo "    Hardware Overview:"; echo
+  echo "      Model Name: $(prop ro.product.manufacturer) $(prop ro.product.model)"
+  echo "      Model Identifier: $(prop ro.product.device)"
+  echo "      Chip: $(prop ro.board.platform)"
+  echo "      Total Number of Cores: $(ncpu)"
+  echo "      Memory: $(( $(mem_kb MemTotal) / 1048576 )) GB"; echo; }
+sw() { echo "Software:"; echo; echo "    System Software Overview:"; echo
+  echo "      System Version: macOS 14.0 (Macoid on Android $(prop ro.build.version.release), SDK $(prop ro.build.version.sdk))"
+  echo "      Kernel Version: Linux $(uname -r)"
+  echo "      Computer Name: $(prop ro.product.model)"; echo "      User Name: macoid (macoid)"; echo; }
+pw() { echo "Power:"; echo; echo "    Battery Information:"; echo
+  P=/sys/class/power_supply/battery
+  echo "      State of Charge (%): $(cat $P/capacity 2>/dev/null || echo ?)"
+  echo "      Charging: $( [ "$(cat $P/status 2>/dev/null)" = Charging ] && echo Yes || echo No)"
+  echo "      Health: $(cat $P/health 2>/dev/null || echo unknown)"; echo; }
+st() { echo "Storage:"; echo; df -h /data 2>/dev/null | tail -n +2 | while read fs size used avail pct mnt; do echo "    Data:"; echo "      Capacity: $size"; echo "      Available: $avail"; echo "      Mount Point: $mnt"; done; echo; }
+nw() { echo "Network:"; echo; for i in /sys/class/net/*; do echo "    ${i##*/}:"; echo "      Type: $(cat $i/type 2>/dev/null)"; echo "      State: $(cat $i/operstate 2>/dev/null)"; done; echo; }
+case "$1" in
+  SPHardwareDataType) hw;; SPSoftwareDataType) sw;; SPPowerDataType) pw;; SPStorageDataType) st;; SPNetworkDataType) nw;;
+  -listDataTypes) printf 'SPHardwareDataType\nSPSoftwareDataType\nSPPowerDataType\nSPStorageDataType\nSPNetworkDataType\n';;
+  "") echo "Hardware / Software / Power / Storage / Network"; echo; hw; sw; pw; st; nw;;
+  *) echo "system_profiler: data type '$1' is not available. Try -listDataTypes" >&2; exit 1;;
+esac

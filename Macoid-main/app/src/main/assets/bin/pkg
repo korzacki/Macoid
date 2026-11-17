@@ -1,0 +1,92 @@
+#!/system/bin/sh
+# pkg - the Macoid package installer. Installs run locally on the phone (Alpine Linux in proot): instant, no GitHub runner.
+. "$MACOID/lib/linux.sh"
+. "$MACOID/lib/native.sh"
+sub=$1; [ $# -gt 0 ] && shift
+
+# keep only package names (drop apt-style flags), translate known command names to Alpine packages
+names() {
+  for _n in "$@"; do
+    case "$_n" in -*) continue;; esac
+    _n=${_n%%@*}; _n=${_n%%=*}
+    _p=$(lx_pkgs "$_n"); [ -n "$_p" ] && echo "$_p" || echo "$_n"
+  done | tr ' ' '\n' | grep -v '^$' | sort -u | tr '\n' ' '
+}
+done_note() { echo "[macoid] done. The new commands are ready to use now." >&2; }
+
+case "$sub" in
+  install|add|i)
+    [ $# -eq 0 ] && die "usage: pkg install <name...>   (e.g. pkg install python ffmpeg jq)"
+    if nat_wanted; then
+      nat_install "$@"; _nrc=$?
+      if [ -z "$NAT_MISS" ]; then [ $_nrc -eq 0 ] && done_note; exit $_nrc; fi
+      echo "[macoid] not in the native repo:$NAT_MISS -> trying the local Alpine Linux instead" >&2
+      set -- $NAT_MISS
+    fi
+    lx_setup || exit 1
+    pk=$(names "$@"); [ -n "$pk" ] || die "pkg: nothing to install"
+    lx_apk_add $pk && done_note;;
+  remove|uninstall|rm|del|purge)
+    [ $# -eq 0 ] && die "usage: pkg remove <name...>"
+    if nat_ready; then
+      _gone=""; _left=""
+      for _n in "$@"; do case "$_n" in -*) continue;; esac; _p=$(nat_name "$_n")
+        if nat_run dpkg -s "$_p" >/dev/null 2>&1; then _gone="$_gone $_p"; else _left="$_left $_n"; fi
+      done
+      [ -n "$_gone" ] && nat_run apt remove -y $_gone >&2
+      [ -z "$_left" ] && exit 0
+      set -- $_left
+    fi
+    lx_setup || exit 1
+    pk=$(names "$@"); _lx_proot /sbin/apk del $pk && { lx_sync_bins; echo "[macoid] removed." >&2; };;
+  search|find)
+    [ $# -eq 0 ] && die "usage: pkg search <text>"
+    if nat_ready; then nat_run apt search "$@"; exit $?; fi
+    lx_setup || exit 1
+    _lx_proot /sbin/apk search -v -- "$@";;
+  list|ls) if nat_ready; then nat_run apt list --installed 2>/dev/null; exit $?; fi; lx_setup || exit 1; _lx_proot /sbin/apk info -v | sort;;
+  info|show) [ $# -eq 0 ] && die "usage: pkg info <name>"; if nat_ready; then nat_run apt show "$(nat_name "$1")"; exit $?; fi; lx_setup || exit 1; _lx_proot /sbin/apk info -a "$(names "$1")";;
+  update|refresh) if nat_wanted; then nat_setup && nat_update && echo "Package index updated."; exit $?; fi; lx_setup || exit 1; lx_apk_update && echo "Package index updated.";;
+  upgrade|full-upgrade|dist-upgrade) if nat_ready; then nat_update >/dev/null; nat_run apt upgrade -y; exit $?; fi; lx_setup || exit 1; _lx_proot /sbin/apk upgrade && lx_sync_bins;;
+  clean|autoremove|cleanup) if nat_ready; then nat_run apt clean; nat_run apt autoremove -y >/dev/null 2>&1; echo "Cleaned."; exit 0; fi; lx_setup || exit 1; _lx_proot /sbin/apk cache clean 2>/dev/null; echo "Cleaned.";;
+  shell) exec /system/bin/sh "$MACOID/bin/lx";;
+  setup) if nat_wanted && [ "$1" != alpine ]; then nat_setup && echo "Native packages are ready."; else lx_setup && lx_sync_bins && echo "Linux is ready."; fi;;
+  reset) if [ "$1" = --native ]; then shift; [ "$1" = --yes ] || die "pkg reset --native deletes every native package. Run: pkg reset --native --yes"
+           rm -rf "$PREFIX" "$NAT_STAMP"; echo "Native packages removed. They are set up again the next time you install something."; exit 0; fi
+         [ "$1" = --yes ] || die "pkg reset deletes the local Linux and everything installed in it. Run: pkg reset --yes"
+         lx_reset; echo "Local Linux removed. It is downloaded again the next time you install something.";;
+  doctor)
+    if nat_ready; then
+      echo "[ok] native packages (Termux-style): $(nat_run dpkg -l 2>/dev/null | grep -c '^ii') installed, prefix $PREFIX"
+      echo "     repo: $(cat "$PREFIX/etc/apt/sources.list" 2>/dev/null | head -1)"
+    elif [ -n "$NAT_BASE_URL" ]; then echo "[--] native packages: not set up yet (first pkg install downloads the bootstrap), repo $NAT_BASE_URL"
+    else echo "[--] native packages: off (no repo in lib/native.conf) - using Alpine fallback"; fi
+    echo "cpu:     $(uname -m)  (engine arch: $(lx_arch 2>/dev/null | cut -d' ' -f1))"
+    [ -x "$LXPROOT" ] && echo "[ok] proot engine" || echo "[--] proot engine not downloaded yet (pkg setup)"
+    if lx_ready; then
+      echo "[ok] Alpine $(cat "$LXROOT/etc/alpine-release" 2>/dev/null), $(du -sk "$LXROOT" 2>/dev/null | cut -f1) KB on disk"
+      echo "     $(_lx_proot /sbin/apk info 2>/dev/null | wc -l) packages installed, $(ls "$LXWRAP" 2>/dev/null | wc -l) commands on PATH"
+      echo "     stored in: $LX   (inside the app's private storage; it survives restarts and app updates signed with the same key)"
+      for t in python3 node ruby go cargo; do lx_has "$t" && echo "     $t: $(_lx_proot "$t" --version 2>&1 | head -1)"; done
+    else echo "[--] Alpine not unpacked yet (pkg setup)"; fi;;
+  help|""|-h|--help)
+    cat <<'TXT'
+pkg - install software on the phone, instantly (prebuilt native packages like Termux; Alpine as fallback; no GitHub runner)
+
+  pkg install <name...>      install  (python node ruby go cargo gcc cmake ffmpeg jq ssh rsync tmux vim ...)
+  pkg remove <name...>       remove
+  pkg search <text>          search the Alpine package index
+  pkg list | info <name>     what is installed / details
+  pkg update | upgrade       refresh the index / upgrade everything
+  pkg shell                  open a Linux shell      (same as: lx)
+  pkg doctor                 status
+  pkg reset --yes            delete the Alpine fallback;   pkg reset --native --yes   delete the native packages
+
+Also works: apk add ..., apt install ..., apt-get install ..., brew install ...
+pip, npm, yarn, pnpm, gem, cargo and go run locally too and install on first use:
+  pip install requests     npm i -g typescript     cargo install ripgrep
+Run any Linux command directly with:  lx <command> ...
+TXT
+    ;;
+  *) die "pkg: unknown command '$sub'. Try: pkg help";;
+esac
