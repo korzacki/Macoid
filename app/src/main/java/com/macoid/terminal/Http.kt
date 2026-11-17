@@ -74,7 +74,7 @@ object HttpCmd {
         o.v("-A", "--user-agent")?.let { headers["User-Agent"] = it }
         o.v("-u", "--user")?.let { headers["Authorization"] = "Basic " + java.util.Base64.getEncoder().encodeToString(it.toByteArray()) }
         var body = (o.all("-d", "--data", "--data-binary")).takeIf { it.isNotEmpty() }?.joinToString("&")
-        if (body != null && body.startsWith("@")) body = File(Cli.cwd(), body.substring(1)).readText()
+        if (body != null && body.startsWith("@")) body = Cli.res(body.substring(1)).readText()
         val method = o.v("-X", "--request") ?: if (o.has("-I", "--head")) "HEAD" else if (body != null) "POST" else "GET"
         if (body != null && !headers.keys.any { it.equals("Content-Type", true) }) headers["Content-Type"] = "application/x-www-form-urlencoded"
         val r = Http.request(method, full, headers, body?.toByteArray(), follow = o.has("-L", "--location"))
@@ -86,7 +86,7 @@ object HttpCmd {
         if (o.has("-f", "--fail") && r.code >= 400) { if (!silent) System.err.println("curl: (22) The requested URL returned error: ${r.code}"); return 22 }
         if (!o.has("-I", "--head")) {
             val out = o.v("-o", "--output") ?: if (o.has("-O")) full.substringAfterLast('/').ifEmpty { "index.html" } else null
-            if (out != null) File(Cli.cwd(), out).writeText(r.body) else print(r.body)
+            if (out != null) Cli.res(out).writeText(r.body) else print(r.body)
         }
         return 0
     }
@@ -99,7 +99,7 @@ object HttpCmd {
         val h = HashMap<String, String>()
         o.v("-U")?.let { h["User-Agent"] = it }
         if (name == "-") { print(Http.request("GET", full, h).body); return 0 }
-        Http.download(full, h, File(Cli.cwd(), name), quiet = o.has("-q"))
+        Http.download(full, h, Cli.res(name), quiet = o.has("-q"))
         return 0
     }
 

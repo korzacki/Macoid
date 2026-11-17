@@ -1,3 +1,4 @@
+#!/system/bin/sh
 case "$1" in
   list|"") echo "/dev/disk0 (internal, physical):"; printf '   #:  TYPE NAME  SIZE  MOUNT\n'
            df -h 2>/dev/null | tail -n +2 | grep -E '/data|/storage|/sdcard|/mnt' | while read fs size used avail pct mnt; do printf '   *:  APFS  %s  %s  %s\n' "${fs##*/}" "$size" "$mnt"; done;;

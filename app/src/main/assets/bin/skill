@@ -1,0 +1,118 @@
+#!/system/bin/sh
+. "$MACOID/lib/common.sh"
+SK="$HOME/.macoid/skills"; mkdir -p "$SK"
+T="${TMPDIR:-/tmp}/skill.$$"
+trap 'rm -rf "$T"' EXIT
+
+fm() { [ "$(head -n 1 "$1" 2>/dev/null)" = "---" ] || return 0; sed -n '2,/^---[[:space:]]*$/p' "$1" | sed '$d'; }
+field() { fm "$1" | sed -n "s/^$2:[[:space:]]*//p" | head -n 1 | tr -d "\"'"; }
+valid_name() { case "$1" in ''|*[!A-Za-z0-9_-]*) return 1;; esac; return 0; }
+single_top() { set -- "$1"/*; if [ $# -eq 1 ] && [ -d "$1" ]; then echo "$1"; else echo "${1%/\*}"; fi; }
+
+# fetch SRC REF -> sets ROOT
+fetch() {
+  src=$1; ref=${2:-HEAD}; mkdir -p "$T"
+  case "$src" in
+    builtin:*) ROOT="$MACOID/lib/skills/${src#builtin:}"; [ -d "$ROOT" ] || { echo "skill: no builtin skill '${src#builtin:}' (see: skill examples)" >&2; return 1; };;
+    *.zip)
+      if [ -f "$src" ]; then zf=$src; else sh "$MACOID/bin/wget" -q -O "$T/dl.zip" "$src" || { echo "skill: download failed" >&2; return 1; }; zf="$T/dl.zip"; fi
+      sh "$MACOID/bin/unzip" -q -d "$T/x" "$zf" >/dev/null || return 1
+      ROOT=$(single_top "$T/x");;
+    ./*|/*|~/*|.|..) ROOT=$(cd "$src" 2>/dev/null && pwd) || { echo "skill: no such folder: $src" >&2; return 1; };;
+    http://*|https://*) fetch "$(echo "$src" | sed 's#^https\{0,1\}://github.com/##; s#\.git$##')" "$2"; return $?;;
+    */*)
+      o=${src%%/*}; rest=${src#*/}; r=${rest%%/*}; sub=""; case "$rest" in */*) sub=${rest#*/};; esac
+      if sh "$MACOID/bin/wget" -q -O "$T/gh.zip" "https://github.com/$o/$r/archive/$ref.zip" 2>/dev/null && sh "$MACOID/bin/unzip" -q -d "$T/x" "$T/gh.zip" >/dev/null 2>&1; then
+        ROOT=$(single_top "$T/x")
+      else
+        echo "[skill] zip download failed (private repo?) - trying git clone..." >&2
+        sh "$MACOID/bin/git" clone -q "https://github.com/$o/$r.git" "$T/clone" >/dev/null 2>&1 || { echo "skill: cannot fetch $o/$r (check the name, or run: gh auth login)" >&2; return 1; }
+        rm -rf "$T/clone/.git"; ROOT="$T/clone"
+      fi
+      [ -n "$sub" ] && ROOT="$ROOT/$sub"
+      [ -d "$ROOT" ] || { echo "skill: path '$sub' not found in $o/$r" >&2; return 1; };;
+    *) echo "skill: don't know how to install '$src' (use owner/repo, a .zip, a folder, or builtin:name)" >&2; return 1;;
+  esac
+}
+
+find_skills() { if [ -f "$1/SKILL.md" ]; then echo "$1"; else find "$1" -maxdepth 3 -name SKILL.md 2>/dev/null | while read f; do dirname "$f"; done; fi; }
+
+install_dir() {
+  d=$1; src=$2
+  n=$(field "$d/SKILL.md" name); [ -n "$n" ] || n=$(basename "$d")
+  valid_name "$n" || { echo "skill: invalid name '$n' (letters, digits, - and _ only)" >&2; return 1; }
+  rm -rf "$SK/$n"; cp -R "$d" "$SK/$n" || return 1
+  rm -rf "$SK/$n/.git"
+  printf '%s\n' "$src" > "$SK/$n/.source"
+  chmod +x "$SK/$n"/bin/* "$SK/$n"/*.sh "$SK/$n"/scripts/* 2>/dev/null
+  echo "Installed skill '$n' - $(field "$SK/$n/SKILL.md" description)"
+  [ -d "$SK/$n/bin" ] && echo "  adds commands: $(ls "$SK/$n/bin" | tr '\n' ' ')(restart the shell with ^C to use them)"
+  return 0
+}
+
+do_install() {
+  ref=""; srcs=""
+  while [ $# -gt 0 ]; do case "$1" in --ref) ref=$2; shift 2;; *) srcs="$srcs $1"; shift;; esac; done
+  [ -n "$srcs" ] || die "usage: skill install <owner/repo[/path] | url.zip | ./folder | builtin:name> [--ref branch]"
+  rc=0
+  for s in $srcs; do
+    rm -rf "$T"; fetch "$s" "$ref" || { rc=1; continue; }
+    found=$(find_skills "$ROOT")
+    [ -n "$found" ] || { echo "skill: no SKILL.md found in $s" >&2; rc=1; continue; }
+    while read d; do install_dir "$d" "$s" || rc=1; done <<EOT
+$found
+EOT
+  done
+  return $rc
+}
+
+cmd=$1; [ $# -gt 0 ] && shift
+case "$cmd" in
+  install|add) do_install "$@";;
+  list|ls|"")
+    n=0; for d in "$SK"/*/; do [ -f "${d}SKILL.md" ] || continue; n=$((n+1)); b=$(basename "$d")
+      printf '%-18s %s\n' "$b" "$(field "${d}SKILL.md" description)"; done
+    [ $n -eq 0 ] && { echo "No skills installed. Try: skill examples   |   skill install builtin:hello-cmd   |   skill install owner/repo"; };;
+  info|show) [ -f "$SK/$1/SKILL.md" ] || die "skill: '$1' is not installed"; cat "$SK/$1/SKILL.md"; [ -f "$SK/$1/.source" ] && echo && echo "(source: $(cat "$SK/$1/.source"))";;
+  remove|rm|uninstall) [ -d "$SK/$1" ] || die "skill: '$1' is not installed"; rm -rf "$SK/${1:?}" && echo "Removed skill '$1' (restart the shell to drop its commands)";;
+  run)
+    n=$1; [ -n "$n" ] || die "usage: skill run <name> [args...]"; shift
+    d="$SK/$n"; [ -d "$d" ] || die "skill: '$n' is not installed"
+    e=$(field "$d/SKILL.md" run)
+    for c in "$e" run.sh scripts/run.sh main.sh; do
+      [ -n "$c" ] && [ -f "$d/$c" ] && { SKILL_DIR="$d" exec /system/bin/sh "$d/$c" "$@"; }
+    done
+    die "skill '$n' has no run script (add 'run: file.sh' to its SKILL.md front matter)";;
+  new)
+    n=$1; valid_name "$n" || die "usage: skill new <name>   (letters, digits, - and _)"
+    [ -e "$SK/$n" ] && die "skill: '$n' already exists"
+    mkdir -p "$SK/$n"
+    printf -- '---\nname: %s\ndescription: Describe what this skill does in one line\nrun: run.sh\n---\n\n# %s\n\nExplain when and how to use this skill.\n' "$n" "$n" > "$SK/$n/SKILL.md"
+    printf '#!/system/bin/sh\n# $SKILL_DIR is this skill folder; your current directory is where you ran it.\necho "Hello from skill %s"\n' "$n" > "$SK/$n/run.sh"
+    echo "Created $SK/$n  (edit with: nano ~/.macoid/skills/$n/SKILL.md)";;
+  update)
+    list=$*; [ -n "$list" ] || list=$(ls "$SK" 2>/dev/null)
+    for n in $list; do
+      [ -f "$SK/$n/.source" ] || { echo "$n: no recorded source, skipping"; continue; }
+      do_install "$(cat "$SK/$n/.source")"
+    done;;
+  examples) echo "Built-in skills (install with: skill install builtin:<name>)"; for d in "$MACOID"/lib/skills/*/; do b=$(basename "$d"); printf '  %-14s %s\n' "$b" "$(field "${d}SKILL.md" description)"; done;;
+  search) [ -n "$1" ] || die "usage: skill search <text>   (finds GitHub repos topic-tagged macoid-skill)"; sh "$MACOID/bin/gh" search repos "topic:macoid-skill $*";;
+  help|-h|--help)
+    cat <<'TXT'
+skill - install and run Macoid skills (folders with a SKILL.md)
+
+  skill install <owner/repo[/path]|url.zip|./folder|builtin:name> [--ref branch]
+  skill list | info <name> | run <name> [args] | remove <name> | update [name]
+  skill new <name>       scaffold a skill      skill examples   list built-in skills
+  skill search <text>    find skills on GitHub (repos with the topic macoid-skill)
+
+A skill folder looks like:
+  SKILL.md        ---\n name: my-skill\n description: one line\n run: run.sh\n ---   then free-form docs
+  run.sh          what `skill run my-skill` executes  ($SKILL_DIR = the skill folder)
+  bin/            optional: every file here becomes a shell command after restarting the shell
+Publish a skill by pushing the folder to GitHub (add the topic macoid-skill so others can find it).
+TXT
+    ;;
+  *) echo "skill: unknown command '$cmd'. Try: skill help" >&2; exit 1;;
+esac

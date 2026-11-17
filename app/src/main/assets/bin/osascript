@@ -1,3 +1,4 @@
+#!/system/bin/sh
 . "$MACOID/lib/common.sh"
 [ "$1" = -l ] && die "osascript: only AppleScript one-liners (-e) are supported; JavaScript (-l) is not."
 script=""

@@ -164,7 +164,7 @@ object GhCmd {
                 println(j.getString("html_url"))
                 val src = o.v("-s", "--source")
                 if (src != null) {
-                    val dir = File(Cli.cwd(), src)
+                    val dir = Cli.res(src)
                     val b = FileRepositoryBuilder().readEnvironment().findGitDir(dir)
                     if (b.gitDir != null) {
                         val cfg = b.build().config
@@ -327,7 +327,7 @@ object GhCmd {
             }
             "download" -> {
                 val id = o.pos.firstOrNull() ?: throw Fail("usage: gh run download <run-id> [-n name] [-D dir]")
-                val dir = File(Cli.cwd(), o.v("-D", "--dir") ?: ".")
+                val dir = Cli.res(o.v("-D", "--dir") ?: ".")
                 val l = ok(Gh.api("GET", "repos/$repo/actions/runs/$id/artifacts"), "listing artifacts")!!.getJSONArray("artifacts")
                 if (l.length() == 0) { System.err.println("no artifacts for run $id"); return 1 }
                 for (i in 0 until l.length()) {
@@ -382,7 +382,7 @@ object GhCmd {
                 println(j.getString("html_url"))
                 val id = j.getLong("id")
                 for (f in o.pos.drop(1)) {
-                    val file = File(Cli.cwd(), f)
+                    val file = Cli.res(f)
                     val up = Http.request("POST", "https://uploads.github.com/repos/$repo/releases/$id/assets?name=${file.name}",
                         Gh.authHeaders() + ("Content-Type" to "application/octet-stream"), file.readBytes())
                     if (up.code >= 400) throw Fail("gh: upload of ${file.name} failed (HTTP ${up.code})")

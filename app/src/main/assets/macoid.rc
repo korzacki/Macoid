@@ -19,6 +19,16 @@ for f in "$HOME"/.local/bin/*; do
   case "$n" in *[-.]*) ;; *) eval "$n() { /system/bin/sh \"$f\" \"\$@\"; }";; esac
 done
 
+# 2b) commands shipped by installed skills (~/.macoid/skills/<name>/bin)
+for d in "$HOME"/.macoid/skills/*/bin; do
+  [ -d "$d" ] || continue
+  for f in "$d"/*; do
+    [ -f "$f" ] || continue
+    n=${f##*/}
+    case "$n" in *[-.]*) eval "alias '$n=/system/bin/sh $f'";; *) eval "$n() { /system/bin/sh \"$f\" \"\$@\"; }";; esac
+  done
+done
+
 # 3) macOS command catalog: anything not available locally runs on a real macOS runner (GitHub Actions)
 for list in "$MACOID/lib/maccmds.txt" "$MACOID/lib/maccmds.extra"; do
   [ -f "$list" ] || continue

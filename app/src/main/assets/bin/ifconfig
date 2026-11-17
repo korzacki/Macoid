@@ -1,3 +1,4 @@
+#!/system/bin/sh
 for i in /sys/class/net/*; do
   n=${i##*/}; st=$(cat $i/operstate 2>/dev/null)
   echo "$n: flags=<$( [ "$st" = up ] && echo UP,RUNNING || echo "$st" )>  mtu $(cat $i/mtu 2>/dev/null)"

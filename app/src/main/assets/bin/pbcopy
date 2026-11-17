@@ -1,2 +1,3 @@
+#!/system/bin/sh
 . "$MACOID/lib/common.sh"
 cat > "$HOME/.pasteboard"; bridge macoid.CLIP_SET

@@ -1,3 +1,4 @@
+#!/system/bin/sh
 dirs="$HOME /sdcard"; name=""; q=""
 while [ $# -gt 0 ]; do case "$1" in -onlyin) dirs=$2; shift 2;; -name) name=$2; shift 2;; -*) shift;; *) q="$q $1"; shift;; esac; done
 pat=${name:-$(echo $q | sed 's/kMDItemFSName *== *"\{0,1\}\([^"]*\)"\{0,1\}.*/\1/')}

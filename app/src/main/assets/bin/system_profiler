@@ -1,3 +1,4 @@
+#!/system/bin/sh
 . "$MACOID/lib/common.sh"
 hw() { echo "Hardware:"; echo; echo "    Hardware Overview:"; echo
   echo "      Model Name: $(prop ro.product.manufacturer) $(prop ro.product.model)"

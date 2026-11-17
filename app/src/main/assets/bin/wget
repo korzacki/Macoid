@@ -1,2 +1,3 @@
+#!/system/bin/sh
 . "$MACOID/lib/common.sh"
 jvm wget "$@"

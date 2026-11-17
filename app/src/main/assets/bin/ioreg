@@ -1,3 +1,4 @@
+#!/system/bin/sh
 . "$MACOID/lib/common.sh"
 P=/sys/class/power_supply/battery
 echo "+-o Root  <class IORegistryEntry>"

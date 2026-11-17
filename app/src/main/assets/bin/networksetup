@@ -1,3 +1,4 @@
+#!/system/bin/sh
 case "$1" in
   -listallhardwareports) for i in /sys/class/net/*; do n=${i##*/}; case "$n" in lo) continue;; esac; echo "Hardware Port: $n"; echo "Device: $n"; echo "Ethernet Address: $(cat $i/address 2>/dev/null)"; echo; done;;
   -listallnetworkservices) echo "An asterisk (*) denotes that a network service is disabled."; ls /sys/class/net | grep -v '^lo$';;

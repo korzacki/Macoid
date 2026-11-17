@@ -1,3 +1,4 @@
+#!/system/bin/sh
 P=/sys/class/power_supply/battery
 cap=$(cat $P/capacity 2>/dev/null || echo ?); st=$(cat $P/status 2>/dev/null || echo unknown)
 case "$st" in Charging) src="AC Power"; s2=charging;; Full) src="AC Power"; s2=charged;; *) src="Battery Power"; s2=discharging;; esac

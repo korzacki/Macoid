@@ -46,6 +46,22 @@ Targets: `android-apk android-aab ios macos swift flutter-apk gradle-java maven 
 Results land in `./build-output` (iOS output is an **unsigned** .ipa for sideloading).
 Cost note: private repos get a monthly free Actions quota, and macOS minutes count 10x.
 
+## Skills
+Skills are installable packages: a folder with a `SKILL.md` (front matter: `name`, `description`, optional `run`),
+scripts, and an optional `bin/` folder whose files become shell commands.
+```
+skill examples                          # built-in skills
+skill install builtin:hello-cmd         # adds a `hello` command (restart the shell with ^C)
+skill install owner/repo                # from GitHub (repo may hold many skills), also owner/repo/subfolder
+skill install https://.../pack.zip      # or a local .zip / ./folder
+skill list | info <name> | run <name> [args] | update | remove <name>
+skill new my-skill                      # scaffold your own, then: nano ~/.macoid/skills/my-skill/SKILL.md
+skill search backup                     # GitHub repos tagged with the topic "macoid-skill"
+```
+Built-ins: `hello-cmd` (template), `repo-backup` (zip the current folder to ~/storage/Download), `apk-release`
+(cloud-build an Android project and copy the APK to ~/storage/Download). Publish a skill by pushing its folder to GitHub.
+Macoid has no AI model on the phone, so a skill here is an installable command package, not a prompt.
+
 ## Editing & storage
 * `nano|vi|vim|edit <file>` opens a built-in editor dialog.
 * `setup-storage` requests storage permission; shared storage is at `~/storage`.

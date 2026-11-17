@@ -42,7 +42,7 @@ object GitCmd {
 
     fun run(argsIn: List<String>): Int {
         var a = argsIn
-        while (a.size >= 2 && a[0] == "-C") { cwd = File(cwd, a[1]).canonicalFile; a = a.drop(2) }
+        while (a.size >= 2 && a[0] == "-C") { cwd = Cli.res(cwd, a[1]).canonicalFile; a = a.drop(2) }
         val cmd = a.firstOrNull() ?: return help()
         val rest = a.drop(1)
         return try {
@@ -154,7 +154,7 @@ object GitCmd {
     // ---------- commands ----------
 
     private fun init(a: List<String>): Int {
-        val dir = File(cwd, a.firstOrNull { !it.startsWith("-") } ?: ".").canonicalFile
+        val dir = Cli.res(cwd, a.firstOrNull { !it.startsWith("-") } ?: ".").canonicalFile
         Git.init().setDirectory(dir).setInitialBranch("main").call().close()
         println("Initialized empty Git repository in ${dir.path}/.git/")
         return 0
@@ -164,7 +164,7 @@ object GitCmd {
         val o = Opts(a, setOf("--depth", "-b", "--branch"))
         val url = expandUrl(o.pos.firstOrNull() ?: throw Fail("fatal: You must specify a repository to clone."))
         val name = o.pos.getOrNull(1) ?: url.trimEnd('/').substringAfterLast('/').removeSuffix(".git")
-        val dir = File(cwd, name)
+        val dir = Cli.res(cwd, name)
         println("Cloning into '$name'...")
         val c = Git.cloneRepository().setURI(url).setDirectory(dir).setProgressMonitor(progress())
         creds(url)?.let { c.setCredentialsProvider(it) }
@@ -236,7 +236,7 @@ object GitCmd {
     private fun mv(a: List<String>): Int {
         val r = repo(); val p = a.filter { !it.startsWith("-") }
         if (p.size != 2) throw Fail("usage: git mv <source> <destination>")
-        val src = File(cwd, p[0]); val dst = File(cwd, p[1]).let { if (it.isDirectory) File(it, src.name) else it }
+        val src = Cli.res(cwd, p[0]); val dst = Cli.res(cwd, p[1]).let { if (it.isDirectory) File(it, src.name) else it }
         dst.parentFile?.mkdirs()
         if (!src.renameTo(dst)) throw Fail("fatal: renaming '${p[0]}' failed")
         val g = Git(r)

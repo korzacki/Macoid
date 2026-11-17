@@ -1,3 +1,4 @@
+#!/system/bin/sh
 mkdir -p "$HOME/.Trash"
 for f in "$@"; do case "$f" in -*) continue;; esac
   [ -e "$f" ] || { echo "trash: $f: No such file" >&2; continue; }

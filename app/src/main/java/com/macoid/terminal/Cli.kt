@@ -30,6 +30,10 @@ object Cli {
     }
 
     fun cwd(): File = File(System.getProperty("user.dir") ?: ".")
+
+    /** Resolve a user-supplied path: absolute paths stay absolute, relative ones are relative to the shell's directory. */
+    fun res(p: String): File = res(cwd(), p)
+    fun res(base: File, p: String): File = File(p).let { if (it.isAbsolute) it else File(base, p) }
 }
 
 /** Tiny option parser: valueFlags take an argument, everything else starting with '-' is boolean. */

@@ -1,3 +1,4 @@
+#!/system/bin/sh
 case "$1" in
   -c) shift; keep=""; [ "$1" = -k ] && shift; [ "$1" = --keepParent ] && shift; src=$1; out=$2
       case "$out" in *.zip) ;; *) out="$out.zip";; esac

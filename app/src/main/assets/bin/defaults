@@ -1,3 +1,4 @@
+#!/system/bin/sh
 DB="$HOME/.defaults"; touch "$DB"; T=$(printf '\t')
 dom=$2; [ "$dom" = -g ] || [ "$dom" = -globalDomain ] && dom=NSGlobalDomain
 key=$3
