@@ -16,8 +16,8 @@ jobs:
             SCHEME=$(xcodebuild -list -json $SPEC | python3 -c "import json,sys; d=json.load(sys.stdin); p=d.get('workspace') or d.get('project'); print(p['schemes'][0])")
           fi
           echo "Scheme: $SCHEME"
-          xcodebuild $SPEC -scheme "$SCHEME" -configuration Release -sdk iphoneos -derivedDataPath build \
-            CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO CODE_SIGN_IDENTITY="" build
+          xcodebuild $SPEC -scheme "$SCHEME" -configuration Release -sdk iphoneos -derivedDataPath build -quiet \
+            COMPILER_INDEX_STORE_ENABLE=NO CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO CODE_SIGN_IDENTITY="" build
           mkdir -p Payload out
           cp -R build/Build/Products/Release-iphoneos/*.app Payload/
           zip -qr out/app-unsigned.ipa Payload

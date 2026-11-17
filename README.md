@@ -1,4 +1,4 @@
-# Macoid 3.0 - a macOS-style terminal for Android (real PTY terminal, root-capable)
+# Macoid 3.2 - a macOS-style terminal for Android (real PTY terminal, root-capable)
 
 Macoid gives you a Mac-like shell on Android: real `git`, a GitHub CLI (`gh`), macOS commands
 (`open`, `pbcopy`, `defaults`, `sw_vers`, `sysctl`, `osascript`, ...), and a way to run **any other macOS
@@ -73,7 +73,26 @@ npm i -g typescript
 lx                               # a Linux shell;  lx <cmd> runs one command there
 pkg doctor                       # status;  pkg reset --yes wipes the local Linux
 ```
-macOS-only tools (swift, xcodebuild, plutil, codesign ...) and `macoid build` still use GitHub Actions.
+Only tools that need a real Mac (xcodebuild, codesign, simctl ...) and `macoid build` still use GitHub Actions - see below.
+
+## Apple tools, fast (3.2)
+Real Xcode cannot run on a phone, so Macoid replaces what can be replaced and picks the cheapest runner for the rest.
+| Tool | Where it runs now | Speed |
+|---|---|---|
+| `plutil`, `PlistBuddy` | on the phone (Python `plistlib` in the local Linux) | instant |
+| `lipo`, `otool`, `install_name_tool`, `dwarfdump` | on the phone (LLVM tools) | instant |
+| `sips` | on the phone (ImageMagick; resize, rotate, flip, crop, format, `-g`) | instant |
+| `xmllint`, `xsltproc` | on the phone (Alpine packages) | instant |
+| `swift`, `swiftc`, `swift build/run/test/package` | **Linux runner** (`ubuntu-latest`, Swift preinstalled) | seconds to boot, 1x minutes |
+| same, but the code imports SwiftUI / UIKit / AppKit / Combine / ... | real Mac (`macos-latest`) | slower, 10x minutes |
+| `xcodebuild`, `codesign`, `simctl`, `ibtool`, `actool` ... | real Mac | slower |
+`swift` looks at your `.swift` files: if none imports an Apple-only framework it uses the Linux runner, and if that run
+fails with `no such module 'UIKit'` (or similar) it repeats the command on a real Mac by itself.
+`MACOID_SWIFT=ubuntu|macos` forces one. `xcrun <tool>` goes through the same routing (`xcrun --sdk ...` needs a Mac).
+`xcodebuild build|test|archive` gets `-quiet COMPILER_INDEX_STORE_ENABLE=NO` (shorter log, no code index); set
+`MACOID_XCODEBUILD_RAW=1` to send your arguments untouched. `macoid build swift` also picks the Linux runner when it can.
+Honest limit: there is no way to build an iOS/macOS app (`xcodebuild`, `macoid build ios`) without a real Mac. Binaries
+that Swift produces on Linux are Linux programs, so use `swift file.swift` / `swift run` to run code (output streams back).
 
 ## Root
 Macoid cannot root a phone - it uses `su` on a phone that is **already rooted** (Magisk, KernelSU, APatch ...).
@@ -88,6 +107,7 @@ Macoid cannot root a phone - it uses `su` on a phone that is **already rooted** 
 * Tab completes file names (shell-native), Ctrl-C works like a normal terminal, arrow keys/history work.
 
 ## Limits (honest list)
+* Cloud jobs no longer send `.build` back to the phone (it is large and Linux/macOS binaries do not run on Android).
 * This is an emulation layer on Android's shell - not macOS. Binaries for Darwin cannot run on the phone; they run in the cloud.
 * The terminal is real, but Android ships no vim/nano/less/python: those names are an editor screen, `cat`, or cloud commands.
   Termux packages cannot be installed (they are built for another prefix) - use `pkg install` instead (Alpine packages, local).

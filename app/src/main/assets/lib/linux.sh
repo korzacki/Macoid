@@ -122,6 +122,10 @@ lx_pkgs() {
     ffmpeg) echo ffmpeg;;
     sqlite3) echo sqlite;;
     jq) echo jq;;
+    llvm-*) echo llvm;;
+    xmllint) echo libxml2-utils;;
+    xsltproc) echo libxslt;;
+    magick|identify|mogrify) echo imagemagick;;
     awk|patch|telnet|nc|diff|cmp|xxd|column|rev|tac|bc|dc|nl|od|hexdump|which|watch|expand|unexpand|fold|fmt|comm|join|split|csplit|md5sum|sha1sum|sha256sum|sha512sum|cpio|bzip2|bunzip2|xz|unxz|lzma|unzip|zip) echo busybox;;
     *) echo "";;
   esac

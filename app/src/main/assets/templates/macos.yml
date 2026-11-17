@@ -15,8 +15,8 @@ jobs:
           if [ -z "$SCHEME" ]; then
             SCHEME=$(xcodebuild -list -json $SPEC | python3 -c "import json,sys; d=json.load(sys.stdin); p=d.get('workspace') or d.get('project'); print(p['schemes'][0])")
           fi
-          xcodebuild $SPEC -scheme "$SCHEME" -configuration Release -sdk macosx -derivedDataPath build \
-            CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO CODE_SIGN_IDENTITY="" build
+          xcodebuild $SPEC -scheme "$SCHEME" -configuration Release -sdk macosx -derivedDataPath build -quiet \
+            COMPILER_INDEX_STORE_ENABLE=NO CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO CODE_SIGN_IDENTITY="" build
           mkdir -p out
           for a in build/Build/Products/Release/*.app; do ditto -c -k --keepParent "$a" "out/$(basename "$a").zip"; done
       - uses: actions/upload-artifact@v4

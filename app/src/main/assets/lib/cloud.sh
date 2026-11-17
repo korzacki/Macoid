@@ -68,7 +68,7 @@ cloud_submit() {
 _cloud_pre() {
   cat <<'PRE'
 export PIP_BREAK_SYSTEM_PACKAGES=1 PIP_DISABLE_PIP_VERSION_CHECK=1 HOMEBREW_NO_AUTO_UPDATE=1 HOMEBREW_NO_INSTALL_CLEANUP=1 HOMEBREW_NO_ENV_HINTS=1
-for __d in "$HOME/.local/bin" "$HOME/.cargo/bin" "$HOME/go/bin" "$(npm prefix -g 2>/dev/null)/bin" "$(python3 -m site --user-base 2>/dev/null)/bin" "$(gem env gemdir 2>/dev/null)/bin"; do
+for __d in /usr/share/swift/usr/bin "$HOME/.local/bin" "$HOME/.cargo/bin" "$HOME/go/bin" "$(npm prefix -g 2>/dev/null)/bin" "$(python3 -m site --user-base 2>/dev/null)/bin" "$(gem env gemdir 2>/dev/null)/bin"; do
   [ -d "$__d" ] && PATH="$__d:$PATH"
 done
 export PATH
@@ -145,7 +145,8 @@ cloud_cmd() {
     _cloud_post
   } > "$_snap/.macoid/cmd.sh"
   sed "s/__RUNNER__/$_runner/" "$MACOID/templates/cloud-exec.yml" > "$_snap/.github/workflows/macoid.yml"
-  echo "[macoid] running ${_tool:-your command} on a real Mac (GitHub $_runner). Disable with MACOID_CLOUD=0" >&2
+  case "$_os" in macos) _where="a real Mac";; ubuntu|linux) _where="a Linux runner";; *) _where="a Windows runner";; esac
+  echo "[macoid] running ${_tool:-your command} on $_where (GitHub $_runner). Disable with MACOID_CLOUD=0" >&2
   _out=""; [ "$_fetch" = 1 ] && _out="$TMPDIR/cloudout.$$"
   _bl="$TMPDIR/binlog.$$"; : > "$_bl"
   [ -n "$_rec" ] && MACOID_BINLOG=$_bl || MACOID_BINLOG=""
@@ -199,6 +200,10 @@ build_cmd() {
     echo "targets: $(ls "$MACOID/templates" | grep -v cloud-exec | sed 's/\.yml$//' | tr '\n' ' ')"
     [ -z "$_target" ] && echo "(could not auto-detect the project type here)"
     return 2
+  fi
+  if [ "$_target" = swift ]; then   # Swift without Apple frameworks builds on a fast Linux runner; SwiftUI/UIKit/... needs a Mac
+    . "$MACOID/lib/apple.sh"
+    [ "$(swift_where build)" = macos ] && _target=swift-mac
   fi
   _snap="$TMPDIR/build.$$"; rm -rf "$_snap"; mkdir -p "$_snap/.macoid" "$_snap/.github/workflows"
   cloud_snapshot "$_snap" || return 1

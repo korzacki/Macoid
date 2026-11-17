@@ -4,10 +4,9 @@ on:
     branches: ["job-**"]
 jobs:
   build:
-    strategy:
-      matrix:
-        os: [ubuntu-latest, macos-latest]
-    runs-on: ${{ matrix.os }}
+    # Linux runner: boots in seconds, Swift is preinstalled, and it costs 1x minutes (macOS costs 10x).
+    # Code that imports SwiftUI/UIKit/... uses swift-mac.yml instead (macoid picks it automatically).
+    runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
       - name: swift build
@@ -18,7 +17,7 @@ jobs:
           find .build/release -maxdepth 1 -type f -perm -u+x -exec cp {} out/ \;
       - uses: actions/upload-artifact@v4
         with:
-          name: swift-${{ matrix.os }}
+          name: swift-linux
           path: out
           if-no-files-found: ignore
           retention-days: 3

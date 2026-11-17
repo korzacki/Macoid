@@ -33,7 +33,7 @@ jobs:
           out = os.path.join(t, "out")
           os.makedirs(out, exist_ok=True)
           for r, d, f in os.walk("."):
-              d[:] = [x for x in d if x not in (".git", ".macoid", ".github")]
+              d[:] = [x for x in d if x not in (".git", ".macoid", ".github", ".build")]
               for n in f:
                   p = os.path.join(r, n)
                   if os.path.getmtime(p) > m:

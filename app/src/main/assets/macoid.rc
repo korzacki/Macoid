@@ -1,5 +1,5 @@
 # Macoid init (sourced by the app's shell at startup)
-export MACOID_VERSION=3.1
+export MACOID_VERSION=3.2
 export PATH="$HOME/.local/bin:$PATH"
 mkdir -p "$HOME/.local/bin" "$HOME/.Trash" 2>/dev/null
 

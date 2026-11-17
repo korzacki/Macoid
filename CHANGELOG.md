@@ -2,6 +2,34 @@
 
 All notable changes to Macoid are documented here.
 
+## [3.2] - 2026-11-17
+
+### Added
+- **Fast Apple tools.** `plutil` and `PlistBuddy` (convert/print/lint/extract/type, Print/Set/Add/Delete/Copy), `lipo`,
+  `otool`, `install_name_tool`, `dwarfdump` (LLVM), `sips` (ImageMagick) and `xmllint`/`xsltproc` now run **on the phone**
+  in the local Linux instead of a macOS runner.
+- **`swift` on a Linux runner.** `swift`, `swiftc`, `swift build|run|test|package`, `swift-format` run on `ubuntu-latest`
+  (Swift is preinstalled there, it boots in seconds and costs 1x minutes instead of 10x). Macoid reads your `.swift` files
+  and only uses a real Mac when they import an Apple-only framework (SwiftUI, UIKit, AppKit, Combine, CryptoKit ...).
+  If the Linux run fails with `no such module '<Apple framework>'` the command is repeated on a real Mac automatically.
+  `MACOID_SWIFT=ubuntu|macos` overrides the choice.
+- `xcrun <tool>` goes through the same routing; `xcrun --sdk ...`, `--find`, `--show-*` run on a real Mac.
+- `macoid build swift` builds on a Linux runner, or the new `swift-mac` template when Apple frameworks are used
+  (the old template built on Linux **and** macOS every time).
+
+### Changed
+- `xcodebuild build|test|archive` adds `-quiet COMPILER_INDEX_STORE_ENABLE=NO` (also in the `ios` and `macos` templates).
+  `MACOID_XCODEBUILD_RAW=1` turns this off.
+- Cloud jobs no longer download `.build` (large; Linux/macOS binaries do not run on Android).
+- The "running on a real Mac" line now says which kind of runner is used.
+- `xcode-select --install` explains the fast alternatives.
+
+### Known limitations
+- `xcodebuild`, `codesign`, `simctl`, `ibtool`, `actool`, `notarytool` ... still need a real Mac: there is no substitute.
+- Swift output built on Linux is a Linux binary; run code with `swift file.swift` / `swift run`.
+- Not tested on a device or on a live runner (written without Android/GitHub access): LLVM/ImageMagick package names are
+  Alpine's, and the Swift install path on the ubuntu image is checked at run time.
+
 ## [3.1] - 2026-11-17
 
 ### Added

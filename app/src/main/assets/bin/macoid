@@ -81,8 +81,9 @@ system_profiler scutil pmset ioreg vm_stat diskutil ifconfig networksetup launch
 trash tree md5 shasum uuidgen brew man softwareupdate xcode-select caffeinate zip unzip curl wget host dig
 
 Developer tools from the catalog (python, node, gcc, clang, make, cmake, cargo, go, ruby, awk, rsync, ssh,
-tmux, htop ...) run locally in the on-phone Linux, installed on first use. Only macOS-only tools (swift,
-xcodebuild, plutil, codesign ...) still run on a real Mac in the cloud. Set MACOID_LINUX=0 to force the cloud.
+tmux, htop ...) run locally in the on-phone Linux, installed on first use. Apple tools: plutil, PlistBuddy, lipo,
+otool, install_name_tool, dwarfdump, sips run on the phone; swift/swiftc/swift build run on a quick Linux runner (a real
+Mac only for SwiftUI/UIKit code); xcodebuild, codesign, simctl ... still need a real Mac. Set MACOID_LINUX=0 to force the cloud.
 Aliases you create with 'alias name=value' are saved and come back after restart ('unalias' removes them).
 Root (rooted phones only): '+' tab = normal shell, '#' tab = root shell via su. In a normal shell: tsu (root shell),
 sudo <cmd> (one command as root). The root shell has its own home (root-home); 'macoid root fixperms' repairs ownership.

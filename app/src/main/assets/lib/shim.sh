@@ -27,7 +27,11 @@ if [ "${MACOID_LINUX:-1}" != 0 ] && [ -z "$MACOID_FORCE_CLOUD" ]; then
   if lx_ready && lx_has "$tool"; then lx_run "$tool" "$@"; exit $?; fi
   if [ -n "$(lx_pkgs "$tool")" ] && lx_ensure "$tool"; then lx_run "$tool" "$@"; exit $?; fi
 fi
-# what is left needs a real Mac (swift, xcodebuild, codesign, plutil ...)
+# Apple tools: fast replacements (plutil, lipo, sips ...) and the quick Linux runner for swift - see lib/apple.sh
+. "$MACOID/lib/apple.sh"
+apple_dispatch "$tool" "$@"; _arc=$?
+[ $_arc -ne 99 ] && exit $_arc
+# what is left needs a real Mac (xcodebuild is handled above; codesign, simctl, ibtool ...)
 if [ "${MACOID_CLOUD:-1}" = 0 ]; then echo "$tool: command not found (cloud runner disabled)" >&2; exit 127; fi
 . "$MACOID/lib/cloud.sh"
 cloud_cmd --os "${MACOID_CLOUD_OS:-macos}" --fetch -- "$tool" "$@"

@@ -6,8 +6,8 @@ android {
         applicationId = "com.macoid.terminal"
         minSdk = 26          // JGit needs java.nio.file (API 26+)
         targetSdk = 28       // allows exec from the app data dir (like Termux)
-        versionCode = 4
-        versionName = "3.1"
+        versionCode = 5
+        versionName = "3.2"
     }
     compileOptions { sourceCompatibility = JavaVersion.VERSION_17; targetCompatibility = JavaVersion.VERSION_17 }
     kotlinOptions { jvmTarget = "17" }
