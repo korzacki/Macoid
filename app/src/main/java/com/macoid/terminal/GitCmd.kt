@@ -168,7 +168,7 @@ object GitCmd {
         println("Cloning into '$name'...")
         val c = Git.cloneRepository().setURI(url).setDirectory(dir).setProgressMonitor(progress())
         creds(url)?.let { c.setCredentialsProvider(it) }
-        o.v("--depth")?.toIntOrNull()?.let { c.setDepth(it) }
+        if (o.v("--depth") != null) System.err.println("warning: --depth ignored, doing a full clone")
         o.v("-b", "--branch")?.let { c.setBranch(it) }
         if (o.has("--bare")) c.setBare(true)
         c.call().close()
