@@ -43,14 +43,31 @@ object ZipCmd {
         return 0
     }
 
+    /** zip -x pattern: a plain name excludes any path segment with that name; patterns with * ? / match the whole path. */
+    private fun excluded(rel: String, pats: List<Regex>, names: Set<String>): Boolean {
+        if (names.isNotEmpty() && rel.split('/').any { it in names }) return true
+        return pats.any { it.matches(rel) || it.matches("$rel/") }
+    }
+
+    private fun glob(p: String): Regex = Regex(buildString {
+        for (c in p) when (c) { '*' -> append(".*"); '?' -> append('.'); else -> append(Regex.escape(c.toString())) }
+    })
+
     fun zip(a: List<String>): Int {
-        val o = Opts(a)
-        if (o.pos.size < 2) { System.err.println("usage: zip [-r] out.zip file..."); return 1 }
+        val o = Opts(a, setOf("-x"))
+        if (o.pos.size < 2) { System.err.println("usage: zip [-r] [-q] [-x pattern]... out.zip file..."); return 1 }
         var out = o.pos[0]
         if (!out.endsWith(".zip")) out += ".zip"
-        val outF = Cli.res(out)
+        val outF = Cli.res(out).canonicalFile
+        val quiet = o.has("-q")
+        val xs = o.all("-x")
+        val names = xs.filter { !it.contains('*') && !it.contains('?') && !it.contains('/') }.toSet()
+        val pats = xs.filter { it.contains('*') || it.contains('?') || it.contains('/') }.map { glob(it.trimStart('.', '/')) }
+        outF.parentFile?.mkdirs()
         ZipOutputStream(outF.outputStream().buffered()).use { z ->
             fun add(f: File, name: String) {
+                if (f.canonicalFile == outF) return                       // never put the archive into itself
+                if (excluded(name, pats, names)) return
                 if (f.isDirectory) {
                     z.putNextEntry(ZipEntry("$name/")); z.closeEntry()
                     if (o.has("-r")) f.listFiles()?.sortedBy { it.name }?.forEach { add(it, "$name/${it.name}") }
@@ -59,11 +76,15 @@ object ZipCmd {
                     f.inputStream().use { it.copyTo(z) }
                     z.closeEntry()
                 }
-                println("  adding: $name")
+                if (!quiet) println("  adding: $name")
             }
             for (p in o.pos.drop(1)) {
                 val f = Cli.res(p)
                 if (!f.exists()) { System.err.println("zip warning: name not matched: $p"); continue }
+                if (p == "." || p == "./") {                              // "zip -r out.zip ." = the folder's contents, no "./" prefix
+                    if (o.has("-r")) f.listFiles()?.sortedBy { it.name }?.forEach { add(it, it.name) }
+                    continue
+                }
                 add(f, p.trimEnd('/'))
             }
         }

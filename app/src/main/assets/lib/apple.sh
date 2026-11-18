@@ -1,57 +1,52 @@
-# Apple-only tools, made fast. Sourced by shim.sh (and cloud.sh for `macoid build swift`).
-#   1. small tools run ON the phone, instantly: plutil, PlistBuddy, lipo, otool, install_name_tool, dwarfdump, sips
-#   2. swift / swiftc / swift build ... run on a Linux (ubuntu) runner: it starts in seconds, Swift is preinstalled and it does
-#      not use the 10x macOS minutes. A real Mac is used only when the code imports an Apple-only framework (SwiftUI, UIKit ...)
-#   3. xcodebuild, codesign, simctl ... have no substitute and still run on a real Mac (xcodebuild gets quicker flags)
-# apple_dispatch returns 99 when it does not handle the tool, so the caller falls back to the real Mac.
+# Apple-only tools. Sourced by shim.sh.
+#   swift swiftc swift build|run|test|package swift-format   -> GitHub runner: Ubuntu (cheap) or, when the code imports an Apple framework, macOS
+#   xcodebuild xcrun codesign simctl ibtool actool productbuild pkgbuild notarytool ...   -> GitHub macOS runner (real Xcode)
+#   plutil, PlistBuddy, lipo, otool, install_name_tool, dwarfdump, sips   -> still on the phone (python / LLVM / ImageMagick in the local Linux)
+# Only Apple tools use a runner; everything else in Macoid runs on the phone.   MACOID_SWIFT=local runs swift in the local Linux instead.
+# apple_dispatch returns 99 when it does not handle the tool.
 . "$MACOID/lib/linux.sh"
-
-# frameworks that do not exist in Swift on Linux
-APPLE_RE='SwiftUI|SwiftUICore|UIKit|AppKit|Cocoa|WatchKit|WidgetKit|AppIntents|SwiftData|CoreData|CoreGraphics|CoreImage|CoreML|CoreText|CoreAudio|CoreMedia|CoreVideo|CoreServices|MobileCoreServices|UniformTypeIdentifiers|QuartzCore|AVFoundation|AVKit|MapKit|WebKit|StoreKit|Combine|SpriteKit|SceneKit|RealityKit|ARKit|Metal|MetalKit|CloudKit|HealthKit|Photos|PhotosUI|Vision|VisionKit|NaturalLanguage|CoreLocation|CoreMotion|CoreBluetooth|Contacts|EventKit|UserNotifications|LocalAuthentication|Security|CryptoKit|OSLog|os|Darwin|Accelerate|GameKit|GameplayKit|PencilKit|Charts|Network|SystemConfiguration|IOKit|ServiceManagement|AppleArchive|Compression|SafariServices|MessageUI|Intents|TipKit|ActivityKit|PassKit'
-
-_apple_load_cloud() { command -v cloud_cmd >/dev/null 2>&1 || . "$MACOID/lib/cloud.sh"; }
-_apple_cloud_ok() {
-  [ "${MACOID_CLOUD:-1}" != 0 ] && return 0
-  echo "$1: needs a GitHub runner but the cloud is disabled (MACOID_CLOUD=0)" >&2; return 1
-}
+. "$MACOID/lib/mac.sh"
 
 # ---------------------------------------------------------------- swift
-# swift_where [args]: prints "ubuntu" or "macos" (the reason goes to stderr)
-swift_where() {
-  case "${MACOID_SWIFT:-auto}" in macos|mac) echo macos; return 0;; ubuntu|linux) echo ubuntu; return 0;; esac
-  case "$1" in --version|-version|--help|-h|help) echo ubuntu; return 0;; esac
-  _l="$TMPDIR/swiftfiles.$$"; : > "$_l"
-  for _a in "$@"; do case "$_a" in *.swift) [ -f "$_a" ] && echo "$_a" >> "$_l";; esac; done
-  [ -s "$_l" ] || find . -maxdepth 6 -name '*.swift' ! -path './.build/*' ! -path './.git/*' ! -path './.macoid/*' 2>/dev/null | head -400 > "$_l"
-  _hit=""
-  [ -s "$_l" ] && _hit=$(xargs grep -lE "^(@testable[[:space:]]+)?import[[:space:]]+($APPLE_RE)([[:space:].;]|\$)" < "$_l" 2>/dev/null | head -1)
-  rm -f "$_l"
-  if [ -n "$_hit" ]; then
-    echo "[macoid] swift: $_hit imports an Apple-only framework -> real Mac (slower). MACOID_SWIFT=ubuntu forces the fast Linux runner." >&2
-    echo macos
+# Apple-only frameworks: code that imports one of these cannot compile on Linux
+_APPLE_FW='^[[:space:]]*(@_exported[[:space:]]+)?(@preconcurrency[[:space:]]+)?import[[:space:]]+(SwiftUI|UIKit|AppKit|Combine|CryptoKit|Cocoa|CoreData|CoreGraphics|CoreImage|CoreLocation|CoreML|CoreMotion|CoreBluetooth|CoreText|CoreFoundation|QuartzCore|AVFoundation|AVKit|WebKit|MapKit|SpriteKit|SceneKit|RealityKit|ARKit|StoreKit|WidgetKit|Metal|MetalKit|Vision|GameplayKit|CloudKit|HealthKit|UserNotifications|Photos|PhotosUI|MessageUI|Contacts|EventKit|Network|OSLog|os|Darwin|ObjectiveC|Security|Accelerate|SwiftData|Observation|AppIntents|ActivityKit|TipKit|Charts)([[:space:]]|\.|;|$)'
+
+_apple_swift_kind() {   # swift args... -> lnx | mac
+  case "${MACOID_SWIFT:-auto}" in ubuntu|linux|lnx) echo lnx; return;; macos|mac) echo mac; return;; esac
+  _fl=""
+  for _a in "$@"; do case "$_a" in *.swift) [ -f "$_a" ] && _fl="$_fl$_a
+";; esac; done
+  if [ -n "$_fl" ]; then
+    _k=$(printf '%s' "$_fl" | while IFS= read -r _f; do grep -qE "$_APPLE_FW" "$_f" 2>/dev/null && { echo mac; break; }; done)
   else
-    echo "[macoid] swift: no Apple-only framework found -> fast Linux runner. MACOID_SWIFT=macos forces a real Mac." >&2
-    echo ubuntu
+    _k=$(find . -maxdepth 6 -name '*.swift' 2>/dev/null | while IFS= read -r _f; do
+      case "$_f" in ./.build/*|./DerivedData/*|./Pods/*|./SourcePackages/*) continue;; esac
+      grep -qE "$_APPLE_FW" "$_f" 2>/dev/null && { echo mac; break; }
+    done)
   fi
+  [ "$_k" = mac ] && echo mac || echo lnx
 }
 
 _apple_swift() {   # tool args...
   _t=$1; shift
-  if [ $# -eq 0 ] && [ "$_t" = swift ]; then echo "swift: the interactive REPL is not supported. Run a file (swift file.swift) or a package (swift run)." >&2; return 126; fi
-  _apple_cloud_ok "$_t" || return 1
-  _apple_load_cloud
-  _w=$(swift_where "$@")
-  if [ "$_w" = macos ]; then cloud_cmd --os macos --fetch -- "$_t" "$@"; return $?; fi
-  _log="$TMPDIR/swift.$$.log"
-  cloud_cmd --os ubuntu --fetch -- "$_t" "$@" > "$_log" 2>&1; _rc=$?
-  cat "$_log"
-  # code that needs a framework we could not see (e.g. an import hidden in #if): run it again on a real Mac
-  if grep -qE "(no such module|unable to find module dependency:) '($APPLE_RE)'" "$_log"; then
-    rm -f "$_log"
-    echo "[macoid] this code needs an Apple framework -> running again on a real Mac" >&2
-    cloud_cmd --os macos --fetch -- "$_t" "$@"; return $?
+  if [ "${MACOID_SWIFT:-auto}" = local ]; then
+    if lx_ready && lx_has "$_t"; then lx_run "$_t" "$@"; return $?; fi
+    if [ "$LX_DISTRO" = debian ] && lx_setup && lx_pkg_add swiftlang >&2 && lx_has "$_t"; then lx_run "$_t" "$@"; return $?; fi
+    echo "$_t: no Swift toolchain in the local Linux ($LX_DISTRO $LX_GUEST). Unset MACOID_SWIFT to use a GitHub runner." >&2
+    return 127
   fi
-  rm -f "$_log"; return $_rc
+  mac_exec "$(_apple_swift_kind "$@")" "$_t" "$@"
+}
+
+# ---------------------------------------------------------------- xcodebuild (real Xcode on a macOS runner)
+_apple_xcodebuild() {
+  if [ "${MACOID_XCODEBUILD_RAW:-0}" != 1 ]; then
+    _act=0; _q=0
+    for _a in "$@"; do case "$_a" in build|test|archive|build-for-testing|test-without-building) _act=1;; -quiet) _q=1;; esac; done
+    # quieter log, no index store: much faster and a readable log on the phone
+    [ $_act = 1 ] && [ $_q = 0 ] && set -- "$@" -quiet COMPILER_INDEX_STORE_ENABLE=NO
+  fi
+  mac_exec mac xcodebuild "$@"
 }
 
 # ---------------------------------------------------------------- plist (plutil, PlistBuddy)
@@ -124,13 +119,11 @@ EOF2
   return $_rc
 }
 
-# ---------------------------------------------------------------- xcrun
+# ---------------------------------------------------------------- xcrun: SDK / toolchain questions need a real Xcode; "xcrun <tool>" goes through the normal routing
 _apple_xcrun() {
   for _a in "$@"; do
     case "$_a" in
-      --sdk|-sdk|--toolchain|-toolchain|--find|-f|--show-*|-l|--log)   # needs the real Xcode / an Apple SDK
-        _apple_cloud_ok xcrun || return 1; _apple_load_cloud
-        cloud_cmd --os macos --fetch -- xcrun "$@"; return $?;;
+      --sdk|-sdk|--toolchain|-toolchain|--find|-f|--show-*|-l|--log) mac_exec mac xcrun "$@"; return $?;;
     esac
   done
   while [ $# -gt 0 ]; do case "$1" in -v|--verbose|-n|--no-cache|-k|--kill-cache) shift;; *) break;; esac; done
@@ -138,25 +131,12 @@ _apple_xcrun() {
   /system/bin/sh "$MACOID/lib/shim.sh" "$@"
 }
 
-# ---------------------------------------------------------------- xcodebuild (real Mac, quicker flags)
-_apple_xcodebuild() {
-  _apple_cloud_ok xcodebuild || return 1; _apple_load_cloud
-  if [ "${MACOID_XCODEBUILD_RAW:-0}" != 1 ]; then
-    _act=0; _q=0; _ci=0
-    for _a in "$@"; do
-      case "$_a" in
-        build|test|archive|build-for-testing|test-without-building) _act=1;;
-        -showBuildSettings|-list|-version|-showsdks|-help|-usage|-exportArchive|-showdestinations) _act=0; break;;
-        -quiet|-q) _q=1;;
-        COMPILER_INDEX_STORE_ENABLE=*) _ci=1;;
-      esac
-    done
-    if [ $_act = 1 ]; then
-      [ $_q = 1 ] || set -- "$@" -quiet                                   # a short log is downloaded faster
-      [ $_ci = 1 ] || set -- "$@" COMPILER_INDEX_STORE_ENABLE=NO          # skips building the code index (nobody reads it in CI)
-    fi
-  fi
-  cloud_cmd --os macos --fetch -- xcodebuild "$@"
+# the tools that go to a GitHub runner (shim.sh checks this list before anything else)
+apple_is_runner_tool() {
+  case "$1" in
+    swift|swiftc|swift-build|swift-package|swift-test|swift-run|swift-format|swift-demangle|xcodebuild|xcrun|codesign|simctl|ibtool|actool|momc|mapc|iconutil|productbuild|productsign|pkgbuild|notarytool|altool|stapler|xctrace|instruments|xcresulttool|xcstringstool|security) return 0;;
+  esac
+  return 1
 }
 
 apple_dispatch() {   # <tool> [args]
@@ -165,6 +145,7 @@ apple_dispatch() {   # <tool> [args]
     swift|swiftc|swift-build|swift-package|swift-test|swift-run|swift-format|swift-demangle) _apple_swift "$_at" "$@"; return $?;;
     xcodebuild) _apple_xcodebuild "$@"; return $?;;
     xcrun) _apple_xcrun "$@"; return $?;;
+    codesign|simctl|ibtool|actool|momc|mapc|iconutil|productbuild|productsign|pkgbuild|notarytool|altool|stapler|xctrace|instruments|xcresulttool|xcstringstool|security) mac_exec mac "$_at" "$@"; return $?;;
   esac
   [ "${MACOID_LINUX:-1}" = 0 ] && return 99          # the local tools below need the on-phone Linux
   case "$_at" in

@@ -4,30 +4,15 @@ sub=$1; [ $# -gt 0 ] && shift
 count() { cat "$MACOID/lib/maccmds.txt" "$MACOID/lib/maccmds.extra" 2>/dev/null | grep -v '^#' | tr -s ' ' '\n' | grep -E '^[A-Za-z0-9_+.-]+$' | sort -u | wc -l; }
 case "$sub" in
   motd) echo "Welcome to Macoid $MACOID_VERSION - a macOS-style terminal for Android (real PTY terminal)."
-        echo "Type 'macoid help' for commands. Real git/gh built in; pkg install gives prebuilt native packages like Termux (pkg help)."
+        echo "Type 'macoid help' for commands. Real git/gh built in; a real Linux (Debian) runs on the phone: pkg install / pip / python all work locally (pkg help). Apple tools (swift, xcodebuild ...) run on a GitHub runner."
         echo "Rooted phone? Use the # button (root session), 'tsu' (root shell) or 'sudo <cmd>'.";;
   version|--version) echo "Macoid $MACOID_VERSION";;
-  cloud) . "$MACOID/lib/cloud.sh"; cloud_cmd "$@";;
-  build) . "$MACOID/lib/cloud.sh"; build_cmd "$@";;
+  build) . "$MACOID/lib/build.sh"; build_cmd "$@";;
+  cloud|sync-commands|installs)
+    echo "macoid: '$sub' is gone. Only Apple tools use a GitHub runner now (swift, xcodebuild, codesign ... just run them); everything else runs in the real Linux on this phone (try: pkg help, lx)." >&2; exit 1;;
   commands|list)
     echo "Built in (run locally):"; ls "$MACOID/bin" "$HOME/.local/bin" 2>/dev/null | grep -v ':' | sort -u | tr '\n' ' '; echo; echo
-    echo "macOS catalog (run on a real Mac in the cloud): $(count) names - see 'brew search <text>'";;
-  sync-commands)
-    echo "[macoid] asking a real Mac for its full command list..." >&2
-    d="$TMPDIR/sync.$$"; mkdir -p "$d"; ( cd "$d" && sh "$MACOID/bin/macoid" cloud --os macos --fetch --sh 'ls /bin /sbin /usr/bin /usr/sbin /usr/local/bin /opt/homebrew/bin 2>/dev/null | grep -E "^[A-Za-z0-9_+.-]+$" | sort -u > maccmds-synced.txt; wc -l maccmds-synced.txt' )
-    if [ -s "$d/maccmds-synced.txt" ]; then
-      { echo "# synced $(date +%F)"; tr '\n' ' ' < "$d/maccmds-synced.txt"; echo; } > "$MACOID/lib/maccmds.extra"
-      echo "[macoid] catalog now has $(count) names. Open a new tab to load them." >&2
-    else echo "sync failed: no list came back" >&2; fi
-    rm -rf "$d";;
-  installs)
-    . "$MACOID/lib/installs.sh"
-    case "$1" in
-      ""|list) inst_list;;
-      clear) rm -f "$INST_FILE" "$BINS_FILE"; echo "Cleared saved installs.";;
-      rm|remove) [ -z "$2" ] && die "usage: macoid installs rm <package>"; inst_remove "$2" && echo "Removed $2." || die "$2: not in saved installs";;
-      *) die "usage: macoid installs [list|rm <package>|clear]";;
-    esac;;
+    echo "Known command names (installed in the local Linux on first use, or Apple stand-ins): $(count) - see 'brew search <text>'";;
   root)
     . "$MACOID/lib/root.sh"
     case "$1" in
@@ -50,32 +35,30 @@ case "$sub" in
     git --version >/dev/null 2>&1 && echo "[ok] git (JGit) works" || echo "[!!] git failed (JVM tools unavailable)"
     gh auth status >/dev/null 2>&1 && echo "[ok] GitHub login" || echo "[--] not logged in to GitHub (gh auth login)"
     . "$MACOID/lib/root.sh"; _su=$(root_su) && echo "[ok] su found: $_su (macoid root status to test)" || echo "[--] no su: not rooted (root features disabled)"
-    . "$MACOID/lib/native.sh"
-    if nat_ready; then echo "[ok] native packages ready (prefix $PREFIX)"
-    elif [ -n "$NAT_BASE_URL" ]; then echo "[--] native packages: first pkg install downloads the bootstrap from $NAT_BASE_URL"
-    else echo "[--] native packages: no repo configured (lib/native.conf) - Alpine fallback only"; fi
     . "$MACOID/lib/linux.sh"
-    if lx_ready; then echo "[ok] local Linux (Alpine) ready - pkg/pip/npm/apk install instantly"
-    elif [ -x "$LXPROOT" ]; then echo "[--] Linux engine downloaded, Alpine not unpacked yet (run: pkg setup)"
-    else echo "[--] local Linux not set up yet (first pkg/pip/npm install sets it up, ~5 MB)"; fi
+    echo "[..] linux: $LX_DISTRO, arch $LX_GUEST (phone: ${LX_HOST:-unsupported CPU $(uname -m)})"
+    if lx_ready; then echo "[ok] real Linux ready on this phone - pkg/pip/npm/apt install instantly, no runner"
+    elif [ -x "$LXPROOT" ]; then echo "[--] Linux engine downloaded, root filesystem not unpacked yet (run: pkg setup)"
+    else echo "[--] Linux not set up yet (first pkg/pip/python use sets it up: ~30 MB download, once)"; fi
+    [ -f "$LXROOT/.macoid-base" ] && echo "[ok] base set installed (python, pip, git, curl, ssh)" || echo "[--] base set not installed yet (pkg setup)"
+    [ -f "$MACOID/mac/repo.ok" ] && echo "[ok] Apple runner repo: $(cat "$MACOID/mac/repo.ok")" || echo "[--] Apple runner repo not created yet (made on the first swift / xcodebuild run)"
     echo "[..] catalog size: $(count)";;
   help|"")
     cat <<'TXT'
-Macoid - macOS-style terminal for Android
+Macoid 4.1 - macOS-style terminal for Android, with a real Linux inside. Only Apple tools use a GitHub runner.
 
   git ...                 real git (clone, commit, push, pull, branch, merge, rebase, stash, tag ...)
-  gh auth login           log in to GitHub with a token, then:
-  gh repo|issue|pr|run|workflow|release|api ...
-  macoid build [target]   compile your project on GitHub Actions (android-apk, android-aab, ios, macos,
-                          swift, flutter-apk, gradle-java, maven, node, electron, python, go, rust,
-                          cmake, dotnet) and download the result into ./build-output
-  macoid cloud [--os macos|ubuntu|windows] [--fetch] -- <cmd...>   run any command on a real runner
-  pkg install <name...>   install software ON THE PHONE, instantly (local Alpine Linux, no GitHub runner)
-                          also: pkg remove|search|list|update|upgrade|shell|doctor, apk, apt, apt-get, brew install
-  pip / npm / yarn / pnpm / gem / cargo / go    run locally and install on first use (pip install requests)
-  lx [cmd ...]            open a Linux shell, or run one command inside the local Linux
-  macoid installs         (legacy cloud installs) list what was installed on the cloud Mac
-  macoid sync-commands    pull the real command list from a Mac (extends the catalog)
+  gh auth login           log in to GitHub with a token, then: gh repo|issue|pr|run|workflow|release|api ...
+  lx [cmd ...]            open a shell in the real Linux on the phone (Debian by default), or run one command there
+  lx distro [debian|alpine]            show / switch the Linux distro
+  lx arch [arm64|arm|x86_64|default]   show / choose the CPU architecture of the Linux
+  pkg install <name...>   install software, instantly, in that Linux (python, pip, node, gcc, ffmpeg, jq ...)
+                          also: pkg remove|search|list|update|upgrade|setup|shell|doctor, apt, apt-get, apk (Alpine), brew install ...
+  python / pip / npm / yarn / pnpm / gem / cargo / go    run locally and install on first use (pip install requests)
+  macoid build [target]   compile your project into ./build-output: on the phone (node python go rust cmake maven gradle-java),
+                          on a GitHub runner for Apple targets (swift ios macos)
+  swift / swiftc / xcodebuild / xcrun / codesign / simctl ...   Apple tools: run on a GitHub runner (needs gh auth login); new/changed
+                          files come back into the current folder. MACOID_XCODE=16.2 picks the Xcode, MACOID_SWIFT=local uses the phone
   macoid root [status|fixperms]   check su access / repair file ownership after working as root
   macoid commands|doctor|version
   skill install|list|run|new|search ...   install and run skills (folders with a SKILL.md); try: skill examples
@@ -84,15 +67,14 @@ macOS-style commands run locally: open pbcopy pbpaste say afplay osascript defau
 system_profiler scutil pmset ioreg vm_stat diskutil ifconfig networksetup launchctl mdfind mdls ditto
 trash tree md5 shasum uuidgen brew man softwareupdate xcode-select caffeinate zip unzip curl wget host dig
 
-Developer tools from the catalog (python, node, gcc, clang, make, cmake, cargo, go, ruby, awk, rsync, ssh,
-tmux, htop ...) run locally in the on-phone Linux, installed on first use. Apple tools: plutil, PlistBuddy, lipo,
-otool, install_name_tool, dwarfdump, sips run on the phone; swift/swiftc/swift build run on a quick Linux runner (a real
-Mac only for SwiftUI/UIKit code); xcodebuild, codesign, simctl ... still need a real Mac. Set MACOID_LINUX=0 to force the cloud.
+Developer tools (python, node, gcc, clang, make, cmake, cargo, go, ruby, awk, rsync, ssh, tmux, htop ...) run in the Linux on
+the phone and are installed on first use. Apple tools plutil, PlistBuddy, lipo, otool, install_name_tool, dwarfdump and sips
+run on the phone too. xcodebuild, codesign, simctl, swift ... run on a GitHub runner. MACOID_LINUX=0 switches the Linux off.
 Aliases you create with 'alias name=value' are saved and come back after restart ('unalias' removes them).
 Root (rooted phones only): '+' tab = normal shell, '#' tab = root shell via su. In a normal shell: tsu (root shell),
 sudo <cmd> (one command as root). The root shell has its own home (root-home); 'macoid root fixperms' repairs ownership.
 Editors: nano/vi/vim/edit <file> open a built-in editor (root-aware). setup-storage grants access to ~/storage.
-This is a real terminal now: top, vim-style full-screen programs, colours, Ctrl-keys and arrow keys all work.
+This is a real terminal: top, vim-style full-screen programs, colours, Ctrl-keys and arrow keys all work.
 TXT
     ;;
   *) echo "macoid: unknown command '$sub'. Try: macoid help" >&2; exit 1;;

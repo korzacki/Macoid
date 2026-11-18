@@ -92,7 +92,7 @@ object Sessions {
         fun onEmpty()
     }
 
-    const val VERSION = "3.4"
+    const val VERSION = "4.1"
     val list = ArrayList<TerminalSession>()
     private val roots = HashSet<TerminalSession>()
     var current = 0
@@ -130,7 +130,11 @@ object Sessions {
     private fun install(ctx: Context) {
         val r = base
         listOf("home", "tmp", "root-home", "tmp-root").forEach { File(r, it).mkdirs() }
-        listOf("bin", "lib", "templates").forEach { copyAssets(ctx, it, File(r, it)) }
+        // 4.0: the cloud / GitHub-runner / native-repo files are gone; remove what an older version left in the app folder
+        listOf("lib/cloud.sh", "lib/installs.sh", "lib/runner-env.sh", "lib/native.sh", "lib/native.conf").forEach { File(r, it).delete() }
+        File(r, "templates").deleteRecursively()
+        File(r, "lib/skills/apk-release").deleteRecursively()
+        listOf("bin", "lib").forEach { copyAssets(ctx, it, File(r, it)) }
         File(r, "bin").listFiles()?.forEach { it.setExecutable(true, false) }
         File(r, "lib").listFiles()?.forEach { it.setExecutable(true, false) }
         copyAssets(ctx, "macoid.rc", File(r, "macoid.rc"))

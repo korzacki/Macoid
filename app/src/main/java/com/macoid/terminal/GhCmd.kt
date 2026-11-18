@@ -32,7 +32,8 @@ object Gh {
         h["X-GitHub-Api-Version"] = "2022-11-28"
         token()?.let { h["Authorization"] = "Bearer $it" }
         if (body != null) h["Content-Type"] = "application/json"
-        return Http.request(method, url, h, body?.toByteArray(), follow)
+        return if (method == "GET") Http.requestRetry(method, url, h, null, follow)
+        else Http.request(method, url, h, body?.toByteArray(), follow)
     }
 
     fun authHeaders(): Map<String, String> = mapOf(
@@ -100,7 +101,7 @@ object GhCmd {
         println("  gh auth login|status|logout|token")
         println("  gh repo create|list|view|clone|delete|fork")
         println("  gh issue list|create|view|close   gh pr list|create|view|merge|close|checkout")
-        println("  gh run list|watch|view|download   gh workflow list|run   gh release create|list")
+        println("  gh run list|watch|wait|view|download   gh workflow list|run   gh release create|list")
         println("  gh search repos <query>           gh api <endpoint> [-X METHOD] [-f key=value] [-q .path]")
         return 0
     }
@@ -279,7 +280,7 @@ object GhCmd {
 
     private fun runCmd(a: List<String>): Int {
         need()
-        val o = Opts(a.drop(1), setOf("-R", "--repo", "-L", "--limit", "--branch", "--wait", "-D", "--dir", "-n", "--name"))
+        val o = Opts(a.drop(1), setOf("-R", "--repo", "-L", "--limit", "--branch", "--wait", "-D", "--dir", "-n", "--name", "--timeout"))
         val repo = repoArg(o)
         when (a.firstOrNull()) {
             "list" -> {
@@ -325,22 +326,59 @@ object GhCmd {
                     Thread.sleep(5000)
                 }
             }
+            // waits for a run to finish WITHOUT dumping its log; exit 0 = success, 1 = failed / cancelled / timed out
+            "wait" -> {
+                val id = o.pos.firstOrNull() ?: throw Fail("usage: gh run wait <run-id> [--timeout seconds]")
+                val limit = System.currentTimeMillis() + (o.v("--timeout")?.toLongOrNull() ?: 5400L) * 1000
+                val t0 = System.currentTimeMillis()
+                var last = ""; var errs = 0
+                while (true) {
+                    val r = try { errs = 0; ok(Gh.api("GET", "repos/$repo/actions/runs/$id"), "reading run")!! }
+                    catch (e: Exception) { if (++errs >= 6) throw e; Thread.sleep(4000); continue }
+                    val st = r.getString("status")
+                    val line = if (st == "completed") "finished: ${r.optString("conclusion", "?")}" else st.replace('_', ' ')
+                    if (line != last) { System.err.println("[macoid] runner: $line (${(System.currentTimeMillis() - t0) / 1000}s)"); last = line }
+                    if (st == "completed") { println(r.optString("conclusion", "")); return if (r.optString("conclusion") == "success") 0 else 1 }
+                    if (System.currentTimeMillis() > limit) { System.err.println("[macoid] gave up waiting (timeout)"); return 1 }
+                    Thread.sleep(if (st == "queued") 3000 else 4000)
+                }
+            }
             "download" -> {
-                val id = o.pos.firstOrNull() ?: throw Fail("usage: gh run download <run-id> [-n name] [-D dir]")
+                val id = o.pos.firstOrNull() ?: throw Fail("usage: gh run download <run-id> [-n name] [-D dir] [--force]")
                 val dir = Cli.res(o.v("-D", "--dir") ?: ".")
-                val l = ok(Gh.api("GET", "repos/$repo/actions/runs/$id/artifacts"), "listing artifacts")!!.getJSONArray("artifacts")
+                val want = o.v("-n", "--name")
+                val l = ok(Gh.api("GET", "repos/$repo/actions/runs/$id/artifacts?per_page=100"), "listing artifacts")!!.getJSONArray("artifacts")
                 if (l.length() == 0) { System.err.println("no artifacts for run $id"); return 1 }
+                var got = 0
                 for (i in 0 until l.length()) {
                     val ar = l.getJSONObject(i)
                     val name = ar.getString("name")
-                    if (o.v("-n", "--name") != null && o.v("-n", "--name") != name) continue
+                    if (want != null && want != name) continue
+                    if (ar.optBoolean("expired")) { System.err.println("artifact '$name' has expired on GitHub and cannot be downloaded any more"); return 1 }
+                    val target = File(dir, name)
+                    // already downloaded and unpacked (same artifact id + size)? then do not fetch it again
+                    val stamp = File(dir, ".$name.artifact")
+                    val sig = "${ar.getLong("id")}:${ar.optLong("size_in_bytes")}"
+                    if (!o.has("--force") && stamp.exists() && stamp.readText().trim() == sig && target.isDirectory && !target.list().isNullOrEmpty()) {
+                        println("artifact '$name' already downloaded -> ${target.path}"); got++; continue
+                    }
                     val zip = File(dir, "$name.zip")
-                    Http.download(ar.getString("archive_download_url"), Gh.authHeaders(), zip)
-                    Zips.extract(zip, File(dir, name)); zip.delete()
-                    println("downloaded artifact '$name' -> ${File(dir, name).path}")
+                    // the zip is kept until it unpacks cleanly, so a failed unpack never costs a second download
+                    var unpacked = false
+                    for (round in 1..2) {
+                        Http.download(ar.getString("archive_download_url"), Gh.authHeaders(), zip, quiet = false)
+                        try { target.deleteRecursively(); Zips.extract(zip, target); unpacked = true; break }
+                        catch (e: Exception) { System.err.println("artifact '$name': the zip is damaged (${e.message}), downloading it again"); zip.delete() }
+                    }
+                    if (!unpacked) { System.err.println("artifact '$name' could not be unpacked"); return 1 }
+                    zip.delete()
+                    dir.mkdirs(); stamp.writeText(sig + "\n")
+                    println("downloaded artifact '$name' -> ${target.path}")
+                    got++
                 }
+                if (got == 0) { System.err.println("no artifact named '$want' in run $id"); return 1 }
             }
-            else -> throw Fail("usage: gh run list|watch|view|download")
+            else -> throw Fail("usage: gh run list|watch|wait|view|download")
         }
         return 0
     }

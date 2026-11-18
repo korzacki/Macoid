@@ -1,7 +1,7 @@
 # Macoid init (sourced by the app's shell at startup)
-export MACOID_VERSION=3.4
-# On PATH: your scripts, then Android's own tools, then launchers for everything installed in the local Linux ($MACOID/linux/wrap)
-# and for skill / cloud-install commands (~/.macoid/xbin). New installs show up here at once, no restart needed.
+export MACOID_VERSION=4.1
+# On PATH: your scripts, then Android's own tools, then launchers for everything installed in the real Linux on the phone
+# ($MACOID/linux/wrap) and for skill commands (~/.macoid/xbin). New installs show up here at once, no restart needed.
 export PATH="$HOME/.local/bin:$PATH:$MACOID/linux/wrap:$HOME/.macoid/xbin"
 mkdir -p "$HOME/.local/bin" "$HOME/.Trash" "$HOME/.macoid/xbin" 2>/dev/null
 # one-time upgrade from 3.2: build the launchers for what is already installed
@@ -13,8 +13,6 @@ if [ "$(id -u 2>/dev/null)" = 0 ]; then export USER=root LOGNAME=root MACOID_ROO
 # 1) every script in $MACOID/bin becomes a command (functions dodge exec restrictions; names with - or . become aliases)
 for f in "$MACOID"/bin/*; do
   n=${f##*/}
-  # a real native binary (Termux-style package) beats Macoid's built-in stand-in for these
-  case "$n" in curl|wget|unzip|zip|tree|man|host|dig|nslookup) [ -x "$PREFIX/bin/$n" ] && continue;; esac
   case "$n" in
     *[-.]*) eval "alias '$n=/system/bin/sh $MACOID/bin/$n'";;
     *) eval "$n() { /system/bin/sh \"$MACOID/bin/$n\" \"\$@\"; }";;
@@ -38,7 +36,7 @@ for d in "$HOME"/.macoid/skills/*/bin; do
   done
 done
 
-# 3) macOS command catalog: anything not available locally runs on a real macOS runner (GitHub Actions)
+# 3) command catalog: each name is a launcher that runs the command in the real Linux on the phone (installing it on first use)
 for list in "$MACOID/lib/maccmds.txt" "$MACOID/lib/maccmds.extra"; do
   [ -f "$list" ] || continue
   for n in $(grep -v '^#' "$list" | tr -s ' ' '\n'); do
@@ -47,15 +45,7 @@ for list in "$MACOID/lib/maccmds.txt" "$MACOID/lib/maccmds.extra"; do
   done
 done
 
-# 3b) commands added by saved cloud installs (old 2.x state; new ones get a launcher in ~/.macoid/xbin)
-if [ -f "$HOME/.macoid/cloudbins" ]; then
-  for n in $(cat "$HOME/.macoid/cloudbins"); do
-    case "$n" in *[!A-Za-z0-9_+.-]*|'') continue;; esac
-    command -v "$n" >/dev/null 2>&1 || eval "alias '$n=/system/bin/sh $MACOID/lib/shim.sh $n'"
-  done
-fi
-
-# 3c) fallback aliases for local-Linux commands that have no launcher yet (launchers in $MACOID/linux/wrap normally cover them)
+# 3b) fallback aliases for local-Linux commands that have no launcher yet (launchers in $MACOID/linux/wrap normally cover them)
 if [ -f "$MACOID/linux/bins" ]; then
   for n in $(cat "$MACOID/linux/bins"); do
     case "$n" in *[!A-Za-z0-9_+.-]*|'') continue;; esac

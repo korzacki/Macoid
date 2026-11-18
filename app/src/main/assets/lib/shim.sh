@@ -1,43 +1,39 @@
-# Runs a command: first natively (prebuilt packages), then in the local Linux (fast, on the phone), and only macOS-only tools on a real Mac runner.
+# Runs a command. Apple-only tools (swift, xcodebuild, xcrun, codesign, simctl ...) go to a GitHub runner (lib/mac.sh);
+# everything else runs in the real Linux on the phone (installing the package on first use), then the Apple stand-ins.
 # Usage: shim.sh <command> [args]
 . "$MACOID/lib/common.sh"
 tool=$1; shift
-# Native (Termux-style) packages first: prebuilt, run straight on Android. Known tools install on first use.
-. "$MACOID/lib/native.sh"
-if [ "${MACOID_NATIVE:-1}" != 0 ]; then
-  if [ -x "$PREFIX/bin/$tool" ]; then exec "$PREFIX/bin/$tool" "$@"; fi
-  if nat_wanted && nat_ensure "$tool"; then exec "$PREFIX/bin/$tool" "$@"; fi
-fi
 case "$tool" in
-  # hardware / OS specific: running these on a cloud VM would report the wrong machine
+  # hardware / OS specific: these inspect or change a Mac, which this phone is not
   kextstat|kmutil|kextload|kextunload|kextcache|csrutil|spctl|tccutil|bputil|fdesetup|firmwarepasswd|nvram|systemsetup|profiles|tmutil|airport|wdutil|powermetrics|sysdiagnose|spindump|purge|dscl|dscacheutil|dsconfigad|dsenableroot|dseditgroup|sysadminctl|pwpolicy|authorizationhost|vsdbutil|reboot|halt|shutdown|dmesg|fsck*|mount_*|newfs_*|asr|bless|hdik|iostat|nettop|sample|leaks|fs_usage)
     echo "$tool: this command inspects or changes the local machine and is not available on Android." >&2; exit 126;;
   # 'su' is only here when the phone has no su binary
   su) echo "su: not found - this phone is not rooted (needs Magisk / KernelSU / APatch)." >&2; exit 127;;
-  # need a real terminal
-  ssh|telnet|ftp|sftp|lldb|htop|tmux|screen|emacs|passwd|login)
-    if [ "${MACOID_LINUX:-1}" != 0 ]; then
-      . "$MACOID/lib/linux.sh"
-      case "$tool" in ssh|sftp|htop|tmux|emacs|telnet) lx_ensure "$tool" && { lx_run "$tool" "$@"; exit $?; };; esac
-    fi
-    echo "$tool: interactive terminal programs are not supported in Macoid." >&2; exit 126;;
-  python|python3|node|ruby|irb|perl|php|lua|julia|R|ghci|ocaml|iex|erl|sbt|scala|clj|dart|deno|bun)
-    # REPLs work when the tool runs locally (below); only the cloud cannot give you a live prompt
-    if [ $# -eq 0 ] && { [ "${MACOID_LINUX:-1}" = 0 ] || { . "$MACOID/lib/linux.sh"; ! lx_has "$tool" && [ -z "$(lx_pkgs "$tool")" ]; }; }; then
-      echo "$tool: the interactive REPL is not supported. Run a script (e.g. $tool file) or use -c/-e." >&2; exit 126
-    fi;;
+  # not useful inside Macoid
+  lldb|passwd|login|ftp)
+    echo "$tool: not supported in Macoid." >&2; exit 126;;
 esac
-# Local Linux first: instant (no runner, no upload, no wait). Installs of known tools happen on first use.
-if [ "${MACOID_LINUX:-1}" != 0 ] && [ -z "$MACOID_FORCE_CLOUD" ]; then
-  . "$MACOID/lib/linux.sh"
-  if lx_ready && lx_has "$tool"; then lx_run "$tool" "$@"; _rc=$?; lx_after "$tool" "$@"; exit $_rc; fi
-  if [ -n "$(lx_pkgs "$tool")" ] && lx_ensure "$tool"; then lx_run "$tool" "$@"; _rc=$?; lx_after "$tool" "$@"; exit $_rc; fi
+# Apple-only tools: a GitHub runner, whatever is installed in the local Linux
+case "$tool" in
+  swift|swiftc|swift-build|swift-package|swift-test|swift-run|swift-format|swift-demangle|xcodebuild|xcrun|codesign|simctl|ibtool|actool|momc|mapc|iconutil|productbuild|productsign|pkgbuild|notarytool|altool|stapler|xctrace|instruments|xcresulttool|xcstringstool|security)
+    . "$MACOID/lib/apple.sh"; apple_dispatch "$tool" "$@"; exit $?;;
+esac
+if [ "${MACOID_LINUX:-1}" = 0 ]; then
+  echo "$tool: command not found (the Linux engine is switched off: MACOID_LINUX=0)" >&2; exit 127
 fi
-# Apple tools: fast replacements (plutil, lipo, sips ...) and the quick Linux runner for swift - see lib/apple.sh
+. "$MACOID/lib/linux.sh"
+# 1) already inside Linux -> run it there
+if lx_ready && lx_has "$tool"; then lx_run "$tool" "$@"; _rc=$?; lx_after "$tool" "$@"; exit $_rc; fi
+# 2) a command we know a package for: install on first use (fast, on the phone), then run it
+if [ -n "$(lx_pkgs "$tool")" ]; then
+  if lx_ensure "$tool"; then lx_run "$tool" "$@"; _rc=$?; lx_after "$tool" "$@"; exit $_rc; fi
+  echo "$tool: could not be installed in the local Linux (see the error above). Check your internet, then run it again; 'pkg doctor' shows the state." >&2
+  exit 127
+fi
+# 3) Apple tools that have an on-phone replacement (plutil, lipo, sips ...)
 . "$MACOID/lib/apple.sh"
 apple_dispatch "$tool" "$@"; _arc=$?
 [ $_arc -ne 99 ] && exit $_arc
-# what is left needs a real Mac (xcodebuild is handled above; codesign, simctl, ibtool ...)
-if [ "${MACOID_CLOUD:-1}" = 0 ]; then echo "$tool: command not found (cloud runner disabled)" >&2; exit 127; fi
-. "$MACOID/lib/cloud.sh"
-cloud_cmd --os "${MACOID_CLOUD_OS:-macos}" --fetch -- "$tool" "$@"
+echo "$tool: command not found." >&2
+echo "  Try: pkg search $tool    or    pkg install <package>" >&2
+exit 127

@@ -38,29 +38,115 @@ object Http {
         return Resp(code, txt, c.getHeaderField("Location"), c.headerFields)
     }
 
-    /** Download to a file; redirects are followed manually so that auth headers are NOT leaked to other hosts. */
-    fun download(url: String, headers: Map<String, String>, dest: File, quiet: Boolean = true) {
+    /** HTTP statuses worth another try (rate limit, server hiccups). */
+    private fun retryable(code: Int) = code == 408 || code == 429 || code in 500..599
+
+    /** GET/HEAD with a few retries on network errors and 5xx, so one dropped packet does not fail a whole command. */
+    fun requestRetry(
+        method: String, url: String, headers: Map<String, String> = emptyMap(),
+        body: ByteArray? = null, follow: Boolean = true, tries: Int = 3
+    ): Resp {
+        var last: Exception? = null
+        for (i in 1..tries) {
+            try {
+                val r = request(method, url, headers, body, follow)
+                if (retryable(r.code) && i < tries) { Thread.sleep(1500L * i); continue }
+                return r
+            } catch (e: java.io.IOException) {
+                last = e
+                if (i < tries) Thread.sleep(1500L * i)
+            }
+        }
+        throw last ?: RuntimeException("request failed: $url")
+    }
+
+    /**
+     * Download to a file. Redirects are followed manually so that auth headers are NOT leaked to other hosts.
+     * Robust: data goes to "<dest>.part" and is renamed only when complete; a dropped connection is retried and
+     * RESUMED from where it stopped (Range), a left-over .part from an earlier try is continued, never started again;
+     * the size is checked against Content-Length.
+     */
+    fun download(url: String, headers: Map<String, String>, dest: File, quiet: Boolean = true, tries: Int = 5) {
+        dest.absoluteFile.parentFile?.mkdirs()
+        val part = File(dest.path + ".part")
+        // a .part that is older than a day is probably from a different version of the file: start clean
+        if (part.exists() && System.currentTimeMillis() - part.lastModified() > 24L * 3600 * 1000) part.delete()
+        var lastErr: Exception? = null
+        for (attempt in 1..tries) {
+            try {
+                if (fetchOnce(url, headers, part, quiet)) { moveInto(part, dest); if (!quiet) System.err.println("saved ${dest.path} (${dest.length()} bytes)"); return }
+            } catch (e: HttpFatal) {
+                part.delete(); throw RuntimeException(e.message)
+            } catch (e: Exception) {
+                lastErr = e
+                if (!quiet) System.err.println("download interrupted (${e.message ?: e.javaClass.simpleName}), try $attempt/$tries")
+            }
+            if (attempt < tries) Thread.sleep(2000L * attempt)
+        }
+        // the .part stays on purpose: the next run continues it
+        throw RuntimeException("download failed after $tries tries: ${lastErr?.message ?: url}")
+    }
+
+    private class HttpFatal(msg: String) : Exception(msg)
+
+    private fun moveInto(part: File, dest: File) {
+        dest.delete()
+        if (!part.renameTo(dest)) { part.copyTo(dest, overwrite = true); part.delete() }
+    }
+
+    /** One connection. Returns true when part now holds the complete file. */
+    private fun fetchOnce(url: String, headers: Map<String, String>, part: File, quiet: Boolean): Boolean {
         var u = url
-        var h = headers
-        for (hop in 0 until 6) {
+        var h = headers.toMutableMap()
+        for (hop in 0 until 8) {
+            val have = if (part.exists()) part.length() else 0L
             val c = URL(u).openConnection() as HttpURLConnection
             c.instanceFollowRedirects = false
             c.connectTimeout = 20000
-            c.readTimeout = 120000
+            c.readTimeout = 60000
             h.forEach { (k, v) -> c.setRequestProperty(k, v) }
+            c.setRequestProperty("Accept-Encoding", "identity")   // a gzip layer would make Content-Length / Range lie
+            if (have > 0) c.setRequestProperty("Range", "bytes=$have-")
             val code = c.responseCode
             if (code in 300..399) {
-                u = URL(URL(u), c.getHeaderField("Location")).toString()
-                h = h.filterKeys { !it.equals("Authorization", true) }
+                val loc = c.getHeaderField("Location") ?: throw HttpFatal("HTTP $code without Location for $u")
+                u = URL(URL(u), loc).toString()
+                h = h.filterKeys { !it.equals("Authorization", true) }.toMutableMap()
+                c.disconnect()
                 continue
             }
-            if (code >= 400) throw RuntimeException("HTTP $code for $u")
-            dest.absoluteFile.parentFile?.mkdirs()
-            c.inputStream.use { i -> dest.outputStream().use { o -> i.copyTo(o) } }
-            if (!quiet) System.err.println("saved ${dest.path} (${dest.length()} bytes)")
-            return
+            if (code == 416) { part.delete(); c.disconnect(); throw java.io.IOException("server refused the resume, starting again") }
+            if (code == 410) throw HttpFatal("HTTP 410: the file is gone (expired) - $u")
+            if (code >= 400) {
+                if (retryable(code)) throw java.io.IOException("HTTP $code for $u")
+                throw HttpFatal("HTTP $code for $u")
+            }
+            val resumed = code == 206 && have > 0
+            if (!resumed && have > 0) part.delete()            // server sent the whole file again
+            val len = c.contentLengthLong
+            val total = if (len >= 0) len + (if (resumed) have else 0L) else -1L
+            var done = if (resumed) have else 0L
+            var lastPct = -1
+            c.inputStream.use { i ->
+                java.io.FileOutputStream(part, resumed).buffered(1 shl 16).use { o ->
+                    val buf = ByteArray(1 shl 16)
+                    while (true) {
+                        val n = i.read(buf)
+                        if (n < 0) break
+                        o.write(buf, 0, n)
+                        done += n
+                        if (!quiet && total > 0) {
+                            val pct = (done * 100 / total).toInt()
+                            if (pct != lastPct) { lastPct = pct; System.err.print("\r[macoid] downloading: $pct%"); System.err.flush() }
+                        }
+                    }
+                }
+            }
+            if (!quiet && total > 0) System.err.println()
+            if (total >= 0 && part.length() != total) throw java.io.IOException("incomplete download (${part.length()} of $total bytes)")
+            return true
         }
-        throw RuntimeException("too many redirects")
+        throw HttpFatal("too many redirects")
     }
 }
 

@@ -1,10 +1,11 @@
 #!/system/bin/sh
 case "$1" in
   -p|--print-path) echo /Applications/Xcode.app/Contents/Developer;;
-  --install) echo "Real Xcode cannot run on a phone. Fast alternatives are built in:"
-             echo "  - swift / swiftc / swift build run on a quick Linux runner (a real Mac only if you import SwiftUI, UIKit ...)"
-             echo "  - plutil, PlistBuddy, lipo, otool, install_name_tool, dwarfdump, sips run on the phone, instantly"
-             echo "  - xcodebuild and 'macoid build ios' still need a real Mac (GitHub runner)";;
+  --install) echo "Real Xcode cannot run on a phone, so Macoid runs the Apple tools on a GitHub runner (gh auth login first):"
+             echo "  - swift / swiftc / swift build ...   Ubuntu runner, or macOS when the code imports SwiftUI, UIKit, AppKit ..."
+             echo "  - xcodebuild, xcrun, codesign, simctl, ibtool, actool, notarytool ...   macOS runner with real Xcode"
+             echo "  - plutil, PlistBuddy, lipo, otool, install_name_tool, dwarfdump, sips   run on the phone"
+             echo "Pick an Xcode version with MACOID_XCODE=16.2. Nothing else leaves the phone.";;
   --version|-v) echo "xcode-select version 2399 (Macoid)";;
   *) echo "usage: xcode-select -p | --install | --version" >&2; exit 1;;
 esac

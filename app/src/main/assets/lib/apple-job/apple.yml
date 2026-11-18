@@ -1,0 +1,84 @@
+# Macoid Apple job: runs ONE Apple tool (swift, xcodebuild, codesign ...) on a GitHub runner and hands the result back.
+# Written into every job commit by Macoid (lib/mac.sh). __RUNNER__ and __TIMEOUT__ are filled in on the phone.
+name: Macoid Apple job
+on:
+  push:
+    branches: ['job-**']
+permissions:
+  contents: read
+jobs:
+  run:
+    runs-on: __RUNNER__
+    timeout-minutes: __TIMEOUT__
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Unpack project
+        shell: bash {0}
+        run: |
+          mkdir -p work result/files
+          unzip -q macoid/work.zip -d work
+          find work -name '*.sh' -exec chmod +x {} + 2>/dev/null
+          [ -f work/gradlew ] && chmod +x work/gradlew
+          true
+
+      - name: Select Xcode
+        if: runner.os == 'macOS'
+        shell: bash {0}
+        run: |
+          X=$(cat macoid/xcode 2>/dev/null)
+          if [ -n "$X" ]; then
+            for p in "/Applications/Xcode_$X.app" /Applications/Xcode_"$X"*.app; do
+              [ -d "$p" ] && { sudo xcode-select -s "$p"; break; }
+            done
+          fi
+          xcodebuild -version 2>&1 | head -2
+
+      # packages that were already downloaded on an earlier job are restored instead of fetched again
+      - name: Package cache (SwiftPM, CocoaPods)
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/Library/Caches/org.swift.swiftpm
+            ~/Library/Caches/CocoaPods
+            ~/.cache/org.swift.swiftpm
+            ~/.swiftpm
+          key: macoid-${{ runner.os }}-${{ hashFiles('work/**/Package.resolved', 'work/**/Podfile.lock') }}
+          restore-keys: |
+            macoid-${{ runner.os }}-
+
+      - name: Run
+        shell: bash {0}
+        run: |
+          touch stamp
+          bash macoid/job.sh > result/log.txt 2>&1
+          echo $? > result/exit
+          cat result/log.txt
+
+      - name: Collect changed files
+        if: always()
+        shell: bash {0}
+        run: |
+          mkdir -p result/files
+          ret=$(cat macoid/return 2>/dev/null || echo changed)
+          [ -f result/exit ] || echo 1 > result/exit
+          if [ "$ret" != none ]; then
+            if [ "$ret" = all ]; then
+              ( cd work && find . -type f -newer ../stamp -print0 )
+            else
+              ( cd work && find . -type f -newer ../stamp \
+                  -not -path './.build/*' -not -path './DerivedData/*' -not -path './Pods/*' \
+                  -not -path './SourcePackages/*' -not -path './.swiftpm/*' -not -path './node_modules/*' \
+                  -not -path './.git/*' -print0 )
+            fi | ( cd work && tar -cf - --null -T - 2>/dev/null ) | tar -xf - -C result/files
+          fi
+          true
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: result
+          path: result
+          retention-days: 1
+          include-hidden-files: true
+          if-no-files-found: warn
