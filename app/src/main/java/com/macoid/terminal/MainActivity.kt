@@ -65,6 +65,12 @@ class MainActivity : Activity(), Sessions.Ui {
         fontDp = prefs.getInt("font", 14)
         buildUi()
         Sessions.ui = this
+        // Termux-style: unpack the bundled bootstrap (apt, dpkg, bash ...) on the first launch, then open the first shell.
+        // Returns at once when it is already installed or no bootstrap is bundled in the APK.
+        NativeBoot.setupIfNeeded(this) { startSessions() }
+    }
+
+    private fun startSessions() {
         if (Sessions.list.isEmpty()) Sessions.create(false)
         show(Sessions.current)
         handleIntent(intent)
@@ -82,7 +88,7 @@ class MainActivity : Activity(), Sessions.Ui {
         super.onResume()
         Sessions.ui = this
         renderTabs()
-        tv.onScreenUpdated()
+        if (Sessions.list.isNotEmpty()) tv.onScreenUpdated()   // empty while the bootstrap is still unpacking
     }
 
     override fun onBackPressed() { moveTaskToBack(true) }   // sessions keep running in the service

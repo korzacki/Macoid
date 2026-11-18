@@ -22,19 +22,27 @@ case "$tool" in
   swift|swiftc|swift-build|swift-package|swift-test|swift-run|swift-format|swift-demangle|xcodebuild|xcrun|codesign|simctl|ibtool|actool|momc|mapc|iconutil|productbuild|productsign|pkgbuild|notarytool|altool|stapler|xctrace|instruments|xcresulttool|xcstringstool|security)
     . "$MACOID/lib/apple.sh"; apple_dispatch "$tool" "$@"; exit $?;;
 esac
+. "$MACOID/lib/native.sh"
+# 1) installed natively (Termux-style package in $PREFIX/bin: python, pip, npm, cargo, ...) -> run it straight on Android
+if [ -x "$PREFIX/bin/$tool" ]; then nat_run "$PREFIX/bin/$tool" "$@"; exit $?; fi
 if [ "${MACOID_LINUX:-1}" = 0 ]; then
+  # no Linux engine: installing natively on first use is the only way left
+  if nat_ensure "$tool"; then nat_run "$PREFIX/bin/$tool" "$@"; exit $?; fi
   echo "$tool: command not found (the Linux engine is switched off: MACOID_LINUX=0)" >&2; exit 127
 fi
 . "$MACOID/lib/linux.sh"
-# 1) already inside Linux -> run it there
+# 2) already inside Linux (installed there earlier) -> run it there
 if lx_ready && lx_has "$tool"; then lx_run "$tool" "$@"; _rc=$?; lx_after "$tool" "$@"; exit $_rc; fi
-# 2) a command we know a package for: install on first use (fast, on the phone), then run it
+# 3) a command with a native package: install it from the native repo on first use (fast, no proot), then run it.
+#    Names the native repo does not have fall through to the local Linux below.
+if nat_ensure "$tool"; then nat_run "$PREFIX/bin/$tool" "$@"; exit $?; fi
+# 4) a command we know a Linux package for: install on first use in the local Linux, then run it
 if [ -n "$(lx_pkgs "$tool")" ]; then
   if lx_ensure "$tool"; then lx_run "$tool" "$@"; _rc=$?; lx_after "$tool" "$@"; exit $_rc; fi
   echo "$tool: could not be installed in the local Linux (see the error above). Check your internet, then run it again; 'pkg doctor' shows the state." >&2
   exit 127
 fi
-# 3) Apple tools that have an on-phone replacement (plutil, lipo, sips ...)
+# 5) Apple tools that have an on-phone replacement (plutil, lipo, sips ...)
 . "$MACOID/lib/apple.sh"
 apple_dispatch "$tool" "$@"; _arc=$?
 [ $_arc -ne 99 ] && exit $_arc

@@ -33,9 +33,32 @@ nat_run() {
   fi
 }
 
-# One-time setup: download + unpack the bootstrap (one zip), point apt at the repo, refresh the index.
+# Point apt at Macoid's repo. The Termux bootstrap ships sources for com.termux, which do not fit this app's prefix.
+# Idempotent: does nothing when no repo is configured or sources.list already says the right thing.
+nat_apply_repo() {
+  [ -n "$NAT_BASE_URL" ] || return 0
+  _want="deb [trusted=yes] $NAT_BASE_URL/apt stable main"
+  [ "$(head -1 "$PREFIX/etc/apt/sources.list" 2>/dev/null)" = "$_want" ] && return 0
+  mkdir -p "$PREFIX/etc/apt/sources.list.d"
+  rm -f "$PREFIX"/etc/apt/sources.list.d/* 2>/dev/null
+  echo "$_want" > "$PREFIX/etc/apt/sources.list"
+  rm -f "$NAT_STAMP"   # new source = the index must be refreshed
+}
+
+# Second-stage script of the bootstrap (dpkg configure). Termux 0.118.x and newer bootstraps keep it in different places.
+nat_second_stage_file() {
+  for _f in "$PREFIX/etc/termux/bootstrap/termux-bootstrap-second-stage.sh" \
+            "$PREFIX/etc/termux/termux-bootstrap/second-stage/termux-bootstrap-second-stage.sh"; do
+    [ -f "$_f" ] && { echo "$_f"; return 0; }
+  done
+  return 1
+}
+
+# One-time setup: unpack the bootstrap (one zip, bundled in the APK and installed at first launch, or downloaded here
+# when none is bundled), point apt at the repo, refresh the index.
 nat_setup() {
-  nat_ready && return 0
+  # already installed (first-launch install from the APK, or an earlier run): only make sure apt uses our repo
+  if nat_ready; then nat_apply_repo; return 0; fi
   [ -n "$NAT_BASE_URL" ] || { echo "macoid: no native repo configured (NAT_BASE_URL in lib/native.conf)" >&2; return 1; }
   _a=$(nat_arch) || { echo "macoid: this CPU ($(uname -m)) has no native bootstrap" >&2; return 1; }
   echo "[macoid] first run: installing the native package system (one time only)..." >&2
@@ -43,14 +66,12 @@ nat_setup() {
   [ "${#_sum}" -eq 64 ] || _sum=""
   ( jvm bootstrap "$NAT_BASE_URL/bootstrap-$_a.zip" "$PREFIX" "$_sum" ) || { echo "macoid: bootstrap failed - nothing was changed" >&2; return 1; }
   # newer bootstraps ship a second stage (dpkg configure of the unpacked packages)
-  _ss="$PREFIX/etc/termux/termux-bootstrap/second-stage/termux-bootstrap-second-stage.sh"
-  if [ -f "$_ss" ]; then
+  _ss=$(nat_second_stage_file)
+  if [ -n "$_ss" ]; then
     _sh="$PREFIX/bin/bash"; [ -x "$_sh" ] || _sh="$PREFIX/bin/sh"
     nat_run "$_sh" "$_ss" >&2 || echo "macoid: second stage reported errors (continuing)" >&2
   fi
-  mkdir -p "$PREFIX/etc/apt/sources.list.d"
-  rm -f "$PREFIX"/etc/apt/sources.list.d/* 2>/dev/null
-  echo "deb [trusted=yes] $NAT_BASE_URL/apt stable main" > "$PREFIX/etc/apt/sources.list"
+  nat_apply_repo
   nat_ready || { echo "macoid: bootstrap unpacked but apt/dpkg are missing" >&2; return 1; }
   nat_update >/dev/null
   echo "[macoid] native packages ready." >&2
@@ -94,7 +115,8 @@ nat_name() {
 nat_for_tool() {
   case "$1" in
     python|python3|python3.*|pip|pip3|node|nodejs|npm|npx|go|gofmt|cargo|rustc|gcc|g++|cc|c++|clang|clang++|make|cmake|perl|php|ruby|irb|gem|bundle|\
-    ssh|scp|sftp|ssh-keygen|rsync|tmux|htop|vim|nvim|emacs|ffmpeg|sqlite3|jq|rg|java|javac|xmllint|xsltproc|magick|awk|nano|yarn|pnpm|lua)
+    ssh|scp|sftp|ssh-keygen|rsync|tmux|htop|vim|nvim|emacs|ffmpeg|sqlite3|jq|rg|java|javac|xmllint|xsltproc|magick|awk|nano|yarn|pnpm|lua|\
+    pipx|uv|uvx|composer|luarocks|bc|file|gdb|strace|patch|xxd|pkg-config)
       nat_name "$1";;
     *) echo "";;
   esac

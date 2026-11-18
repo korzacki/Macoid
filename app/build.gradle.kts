@@ -27,6 +27,8 @@ android {
     compileOptions { sourceCompatibility = JavaVersion.VERSION_17; targetCompatibility = JavaVersion.VERSION_17 }
     kotlinOptions { jvmTarget = "17" }
     lint { abortOnError = false; checkReleaseBuilds = false }
+    // assets/bootstrap/*.zip (see tools/bundle-bootstrap.sh) are already compressed: store them as they are
+    androidResources { noCompress += "zip" }
     packaging {
         resources {
             excludes += listOf("META-INF/AL2.0", "META-INF/LGPL2.1", "META-INF/DEPENDENCIES",

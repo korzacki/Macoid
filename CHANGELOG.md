@@ -2,6 +2,35 @@
 
 All notable changes to Macoid are documented here.
 
+## [Unreleased]
+
+### Added
+- **Termux-style bootstrap installer** (`Bootstrap.kt`, modelled on `TermuxInstaller.java` of termux-app 0.118.x).
+  - The bootstrap zip can now be **bundled in the APK** (`assets/bootstrap/bootstrap-<arch>.zip`, filled by `tools/bundle-bootstrap.sh`,
+    and automatically by the build workflow when the `NAT_BASE_URL` repo variable is set; `BUNDLE_ARCHES` picks the CPUs, default `aarch64`).
+    `MainActivity` installs it on the **first launch** with a progress dialog: offline, no first `pkg install` wait.
+    Without a bundled zip nothing changes (download on the first `pkg install`).
+  - Same steps as Termux: skip when the prefix already has content; delete leftover staging; unpack into a staging dir;
+    error when `SYMLINKS.txt` is missing or malformed; `0700` for `bin/`, `libexec`, apt helpers and the second-stage script;
+    atomic rename to `files/usr`; run the second stage and **delete the prefix again if it fails** (Try again / Abort dialog);
+    only the primary user may install.
+  - `bootstrap` CLI also accepts a local zip file, not just a URL.
+- More commands install natively on first use: pipx uv uvx composer luarocks bc file gdb strace patch xxd pkg-config.
+
+### Changed
+- **pip, npm, gem, cargo, go, yarn, pipx, brew ... now run natively first (Termux-style), Linux proot only as fallback.**
+  `native.sh` already knew how to install Termux packages on first use (`nat_ensure`) but nothing called it, so every one of these
+  went to the Linux in proot. Now `shim.sh` tries, in order: installed natively -> installed in Linux earlier -> install natively on
+  first use -> install in Linux on first use. Names the native repo does not have fall through to Linux as before.
+- `brew install|uninstall|list|search|info` use the native packages first (same engine as `pkg`), then Linux. `brew update` refreshes
+  the native index and `brew upgrade` runs `apt upgrade` (both were no-ops).
+- PATH now also has `~/.cargo/bin` and `~/go/bin` (`cargo install`, `go install`), like on Termux.
+
+### Fixed
+- `native.sh` looked for the second-stage script only in `etc/termux/termux-bootstrap/second-stage/`; Termux 0.118.x keeps it in
+  `etc/termux/bootstrap/`. Both are checked now.
+- A prefix installed from the APK now gets Macoid's apt source (`nat_apply_repo`); the Termux bootstrap's own sources point at `com.termux`.
+
 ## [4.2] - 2026-11-18
 
 ### Added
