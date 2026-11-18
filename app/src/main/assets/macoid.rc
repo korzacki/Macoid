@@ -1,5 +1,5 @@
 # Macoid init (sourced by the app's shell at startup)
-export MACOID_VERSION=4.1
+export MACOID_VERSION=4.2
 # On PATH: your scripts, then Android's own tools, then launchers for everything installed in the real Linux on the phone
 # ($MACOID/linux/wrap) and for skill commands (~/.macoid/xbin). New installs show up here at once, no restart needed.
 export PATH="$HOME/.local/bin:$PATH:$MACOID/linux/wrap:$HOME/.macoid/xbin"
@@ -37,7 +37,7 @@ for d in "$HOME"/.macoid/skills/*/bin; do
 done
 
 # 3) command catalog: each name is a launcher that runs the command in the real Linux on the phone (installing it on first use)
-for list in "$MACOID/lib/maccmds.txt" "$MACOID/lib/maccmds.extra"; do
+for list in "$MACOID/lib/maccmds.txt" "$MACOID/lib/maccmds.extra" "$MACOID/lib/maccmds.mac"; do
   [ -f "$list" ] || continue
   for n in $(grep -v '^#' "$list" | tr -s ' ' '\n'); do
     case "$n" in *[!A-Za-z0-9_+.-]*|'') continue;; esac
@@ -52,6 +52,14 @@ if [ -f "$MACOID/linux/bins" ]; then
     command -v "$n" >/dev/null 2>&1 || eval "alias '$n=/system/bin/sh $MACOID/lib/shim.sh $n'"
   done
 fi
+
+# 3c) macOS syntax on Android's own tools: the call goes through lib/mactr.sh only when it uses a Mac-only form
+#     (sed -i '', date -v/-j/-r, stat -f %z, mktemp -t, ls -G); everything else runs Android's binary directly, no extra process.
+[ -f "$MACOID/bin/sed" ]    || sed()    { case " $* " in *" -i "*|*" -i"*|*" -l "*) /system/bin/sh "$MACOID/lib/mactr-run.sh" sed "$@";; *) /system/bin/sed "$@";; esac; }
+[ -f "$MACOID/bin/date" ]   || date()   { case " $* " in *" -v"*|*" -j"*|*" -r"*) /system/bin/sh "$MACOID/lib/mactr-run.sh" date "$@";; *) /system/bin/date "$@";; esac; }
+[ -f "$MACOID/bin/stat" ]   || stat()   { case " $* " in *" -f"*) /system/bin/sh "$MACOID/lib/mactr-run.sh" stat "$@";; *) /system/bin/stat "$@";; esac; }
+[ -f "$MACOID/bin/mktemp" ] || mktemp() { case " $* " in *" -t"*) /system/bin/sh "$MACOID/lib/mactr-run.sh" mktemp "$@";; *) /system/bin/mktemp "$@";; esac; }
+[ -f "$MACOID/bin/ls" ]     || ls()     { case " $* " in *" -"*[G@eOT]*) /system/bin/sh "$MACOID/lib/mactr-run.sh" ls "$@";; *) /system/bin/ls "$@";; esac; }
 
 # 4) macOS-flavoured shell environment
 unalias vi vim nano pico less more top sudo 2>/dev/null

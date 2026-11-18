@@ -2,7 +2,7 @@
 # brew - Homebrew-style front end. Formulae are installed into the real Linux on the phone (no GitHub runner, no cloud).
 . "$MACOID/lib/common.sh"
 . "$MACOID/lib/linux.sh"
-CAT="$MACOID/lib/maccmds.txt"; EXTRA="$MACOID/lib/maccmds.extra"
+CAT="$MACOID/lib/maccmds.txt"; EXTRA="$MACOID/lib/maccmds.extra $MACOID/lib/maccmds.mac"
 names() { cat "$CAT" $EXTRA 2>/dev/null | grep -v '^#' | tr -s ' ' '\n' | grep -E '^[A-Za-z0-9_+.-]+$' | sort -u; }
 # local install: returns 0 = installed, 1 = no such package, 2 = real error (no internet, engine will not start ...)
 brew_local() {

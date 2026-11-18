@@ -113,8 +113,8 @@ lx_setup() {
     [ "$_lx_got" = 1 ] || { [ -s "$_tgz" ] && tar -tzf "$_tgz" >/dev/null 2>&1 && _lx_got=1; }
     [ "$_lx_got" = 1 ] || { echo "macoid: the downloaded Linux image is damaged; run again to download it fresh" >&2; rm -f "$_tgz" "$_tgz.part"; return 1; }
     rm -rf "$LXROOT"; mkdir -p "$LXROOT"
-    tar -xzf "$_tgz" -C "$LXROOT" --exclude='./dev/*' 2>/dev/null
-    [ -e "$LXROOT/$_marker" ] || { echo "macoid: unpacking the Linux root filesystem failed (is the phone out of storage?). The download is kept - run again to retry the unpack." >&2; rm -rf "$LXROOT"; return 1; }
+    tar -xzf "$_tgz" -C "$LXROOT" --exclude='./dev/*' 2>"$LX/untar.err"
+    [ -e "$LXROOT/$_marker" ] || { echo "macoid: unpacking the Linux root filesystem failed (is the phone out of storage?). The download is kept - run again to retry the unpack." >&2; tail -n 5 "$LX/untar.err" >&2; rm -rf "$LXROOT"; return 1; }
     rm -f "$_tgz"
   fi
   mkdir -p "$LXROOT/etc" "$LXROOT/root" "$LXROOT/tmp" "$LXROOT/proc" "$LXROOT/sys" "$LXROOT/dev" "$LXROOT/usr/local/bin"
@@ -127,10 +127,11 @@ lx_setup() {
     printf 'APT::Sandbox::User "root";\nAPT::Install-Recommends "false";\nAcquire::Retries "3";\nDpkg::Use-Pty "0";\n' > "$LXROOT/etc/apt/apt.conf.d/99macoid"
   else mkdir -p "$LXROOT/var/cache/apk"; fi
   lx_write_inner_pkg
-  # some phones need seccomp off for proot; probe once and remember
-  if ! _lx_proot true >/dev/null 2>&1; then
-    : > "$LX/noseccomp"
-    _lx_proot true >/dev/null 2>&1 || { echo "macoid: the Linux engine does not start on this phone" >&2; rm -f "$LX/noseccomp"; return 1; }
+  # some phones need seccomp off (or a plainer proot setup); probe the modes in turn and remember the first that works
+  if ! lx_probe; then
+    echo "macoid: the Linux engine does not start on this phone" >&2
+    lx_probe_report >&2
+    return 1
   fi
   : > "$LXROOT/.macoid-ready"
   lx_pkg_update >/dev/null 2>&1
@@ -188,6 +189,42 @@ EOS
   chmod 755 "$LXROOT/usr/local/bin/pkg"
 }
 
+# ---------------------------------------------------------------- does proot start here?
+# Tries: default, seccomp off, seccomp off + plain mode. The first one that runs "true" is kept ($LX/noseccomp, $LX/safe).
+# Everything proot says goes to $LX/probe.log so a failure can be shown instead of guessed.
+lx_probe() {
+  _lxlog="$LX/probe.log"; : > "$_lxlog"
+  {
+    echo "date: $(date 2>/dev/null)"
+    echo "uname: $(uname -a 2>/dev/null)"
+    echo "android sdk: $(getprop ro.build.version.sdk 2>/dev/null)  device: $(getprop ro.product.model 2>/dev/null)"
+    echo "proot: $(ls -l "$LXPROOT" 2>&1)"
+    echo "proot --version: $("$LXPROOT" --version 2>&1 | head -n 2)"
+    echo "TMPDIR=$TMPDIR HOME=$HOME"
+  } >> "$_lxlog" 2>&1
+  for _lxm in default noseccomp safe; do
+    rm -f "$LX/noseccomp" "$LX/safe"
+    case "$_lxm" in noseccomp) : > "$LX/noseccomp";; safe) : > "$LX/noseccomp"; : > "$LX/safe";; esac
+    echo "== mode: $_lxm" >> "$_lxlog"
+    _lxrc=0; _lx_proot true >>"$_lxlog" 2>&1 || _lxrc=$?
+    [ "$_lxrc" = 0 ] && { echo "-> works" >> "$_lxlog"; return 0; }
+    echo "-> failed (exit $_lxrc)" >> "$_lxlog"
+  done
+  rm -f "$LX/noseccomp" "$LX/safe"
+  return 1
+}
+lx_probe_report() {
+  echo "---- proot said (full log: $LX/probe.log) ----"
+  tail -n 25 "$LX/probe.log" 2>/dev/null
+  echo "---- root filesystem check ----"
+  for _f in usr/bin/env usr/bin/true bin/sh; do
+    if [ -e "$LXROOT/$_f" ] || [ -L "$LXROOT/$_f" ]; then echo "ok    $_f"; else echo "MISSING $_f"; fi
+  done
+  if ls "$LXROOT"/usr/lib/*/libc.so.6 "$LXROOT"/lib/ld-musl-* >/dev/null 2>&1; then echo "ok    libc"
+  else echo "MISSING libc: the unpack was incomplete. It was wiped; run the command again to download and unpack it fresh."; rm -rf "$LXROOT"; fi
+  echo "Send these lines (or $LX/probe.log) to get it fixed."
+}
+
 # ---------------------------------------------------------------- running things
 # raw proot call: _lx_proot <cmd> [args]   (runs as fake root inside the root filesystem)
 _lx_proot() {
@@ -197,9 +234,12 @@ _lx_proot() {
   case "$PWD/" in "$HOME"/*) ;; *) [ -d "$PWD" ] && _lx_extra="-b $PWD";; esac
   [ -d /storage ] && _lx_extra="$_lx_extra -b /storage"
   [ -n "$LX_QEMU" ] && _lx_extra="$_lx_extra -q $LX_QEMU"
-  [ "$LX_DISTRO" = debian ] && _lx_extra="$_lx_extra -k 6.2.1-Macoid"     # glibc wants a believable kernel version
+  _lx_sys="-b /sys"
+  if [ -f "$LX/safe" ]; then _lx_sys=""      # plain mode: no /sys bind, no fake kernel version
+  elif [ "$LX_DISTRO" = debian ]; then _lx_extra="$_lx_extra -k 6.2.1-Macoid"     # glibc wants a believable kernel version
+  fi
   PROOT_TMP_DIR="$TMPDIR" "$LXPROOT" --link2symlink -0 --kill-on-exit -r "$LXROOT" \
-    -b /dev -b /proc -b /sys -b "$HOME" $_lx_extra \
+    -b /dev -b /proc $_lx_sys -b "$HOME" $_lx_extra \
     -w "$PWD" \
     /usr/bin/env -i HOME=/root USER=root LOGNAME=root SHELL=/bin/sh \
       TERM="${TERM:-xterm-256color}" COLORTERM="${COLORTERM:-}" LANG=C.UTF-8 TMPDIR=/tmp \
@@ -275,6 +315,14 @@ lx_pkgs_alpine() {
   esac
 }
 
+# last resort: the catalog's command -> package table (lib/cmdpkg.map, one "command package" per line)
+lx_pkgs_map() {
+  [ -f "$MACOID/lib/cmdpkg.map" ] || return 0
+  case "$1" in ''|*[!A-Za-z0-9_+.-]*) return 0;; esac
+  __lx_pm=$(printf '%s' "$1" | sed 's/\./\\./g')
+  grep "^$__lx_pm " "$MACOID/lib/cmdpkg.map" 2>/dev/null | head -n 1 | cut -d' ' -f2
+}
+
 lx_pkgs_debian() {
   case "$1" in
     python|pydoc) echo "python3 python-is-python3";;
@@ -313,7 +361,7 @@ lx_pkgs_debian() {
     dig|nslookup|host) echo bind9-dnsutils;;
     ping) echo iputils-ping;;
     man) echo man-db;;
-    *) echo "";;
+    *) lx_pkgs_map "$1";;
   esac
 }
 

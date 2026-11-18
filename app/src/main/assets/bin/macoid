@@ -1,7 +1,7 @@
 #!/system/bin/sh
 . "$MACOID/lib/common.sh"
 sub=$1; [ $# -gt 0 ] && shift
-count() { cat "$MACOID/lib/maccmds.txt" "$MACOID/lib/maccmds.extra" 2>/dev/null | grep -v '^#' | tr -s ' ' '\n' | grep -E '^[A-Za-z0-9_+.-]+$' | sort -u | wc -l; }
+count() { cat "$MACOID/lib/maccmds.txt" "$MACOID/lib/maccmds.extra" "$MACOID/lib/maccmds.mac" 2>/dev/null | grep -v '^#' | tr -s ' ' '\n' | grep -E '^[A-Za-z0-9_+.-]+$' | sort -u | wc -l; }
 case "$sub" in
   motd) echo "Welcome to Macoid $MACOID_VERSION - a macOS-style terminal for Android (real PTY terminal)."
         echo "Type 'macoid help' for commands. Real git/gh built in; a real Linux (Debian) runs on the phone: pkg install / pip / python all work locally (pkg help). Apple tools (swift, xcodebuild ...) run on a GitHub runner."
@@ -45,7 +45,7 @@ case "$sub" in
     echo "[..] catalog size: $(count)";;
   help|"")
     cat <<'TXT'
-Macoid 4.1 - macOS-style terminal for Android, with a real Linux inside. Only Apple tools use a GitHub runner.
+Macoid 4.2 - macOS-style terminal for Android, with a real Linux inside. Only Apple tools use a GitHub runner.
 
   git ...                 real git (clone, commit, push, pull, branch, merge, rebase, stash, tag ...)
   gh auth login           log in to GitHub with a token, then: gh repo|issue|pr|run|workflow|release|api ...

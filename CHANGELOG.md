@@ -2,6 +2,23 @@
 
 All notable changes to Macoid are documented here.
 
+## [4.2] - 2026-11-18
+
+### Added
+- **Command catalog: 1500 commands** (`lib/maccmds.mac`, counted by `macoid doctor`): 640+ real macOS names (BSD tools, Xcode/Command Line Tools,
+  Homebrew `g*` GNU names) plus 850+ Linux tools whose names were checked against the Ubuntu package index. `lib/cmdpkg.map` says which
+  package provides each one, so any of them installs on first use in the local Linux (also `brew install <name>`).
+- **macOS -> Android translator** (`lib/mactr.sh`): the call you would type on a Mac is turned into what the phone understands.
+  Translated: `sed -i ''`, `date -v+1d` / `-j -f fmt str` / `-r epoch`, `stat -f "%z %Sm %N"`, `md5` (`-q -r -s`), `shasum -a N`, `sha1|sha256|sha512`,
+  `mktemp -t`, `ls -G -@ -e -O -T`, `jot`, `ditto` (copy, `-c -k --keepParent`, `-x -k`), `mdfind` (name search), `mdls`, `scutil --get`,
+  `vm_stat`, `system_profiler SPHardwareDataType|SPSoftwareDataType`, `pmset -g batt`, `caffeinate`, `xattr -cr`, `chflags`, `screencapture`, `diskutil list|info`.
+  Mac-only system tools (`hdiutil`, `networksetup`, `ioreg`, `launchctl` ...) now say so in one line instead of "command not found".
+  `sed`, `date`, `stat`, `mktemp`, `ls` only go through the translator when the call uses a Mac-only form; otherwise Android's own binary runs directly.
+
+### Fixed
+- The Linux engine start check hid proot's error. It now tries three proot modes (default, seccomp off, plain), keeps the real output in
+  `linux/probe.log`, and prints it with a root filesystem check when all fail. Unpack errors from `tar` are shown too.
+
 ## [4.1] - 2026-11-18
 
 ### Added

@@ -13,6 +13,10 @@ case "$tool" in
   lldb|passwd|login|ftp)
     echo "$tool: not supported in Macoid." >&2; exit 126;;
 esac
+# macOS syntax -> Android (lib/mactr.sh): sed -i '', date -v, stat -f, md5, shasum, jot, ditto, mdfind, scutil ...
+# status 99 = no rule for this command, carry on below
+. "$MACOID/lib/mactr.sh"; mactr_run "$tool" "$@"; _mrc=$?
+[ "$_mrc" -ne 99 ] && exit "$_mrc"
 # Apple-only tools: a GitHub runner, whatever is installed in the local Linux
 case "$tool" in
   swift|swiftc|swift-build|swift-package|swift-test|swift-run|swift-format|swift-demangle|xcodebuild|xcrun|codesign|simctl|ibtool|actool|momc|mapc|iconutil|productbuild|productsign|pkgbuild|notarytool|altool|stapler|xctrace|instruments|xcresulttool|xcstringstool|security)
