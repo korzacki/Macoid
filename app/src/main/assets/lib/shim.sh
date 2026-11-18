@@ -23,26 +23,30 @@ case "$tool" in
     . "$MACOID/lib/apple.sh"; apple_dispatch "$tool" "$@"; exit $?;;
 esac
 . "$MACOID/lib/native.sh"
-# 1) installed natively (Termux-style package in $PREFIX/bin: python, pip, npm, cargo, ...) -> run it straight on Android
-if [ -x "$PREFIX/bin/$tool" ]; then nat_run "$PREFIX/bin/$tool" "$@"; exit $?; fi
+# 0) genuine Termux packages: run $PREFIX/bin/<tool>, or install it first with the real apt (python always brings the real pip)
+if [ "${MACOID_NATIVE:-1}" != 0 ] && nat_wanted && [ "${MACOID_DISTRO:-}" != alpine ]; then
+  if [ -x "$PREFIX/bin/$tool" ] || { nat_setup && nat_ensure "$tool"; }; then nat_run "$PREFIX/bin/$tool" "$@"; exit $?; fi
+  if [ "${MACOID_LINUX:-}" != 1 ]; then
+    . "$MACOID/lib/apple.sh"; apple_dispatch "$tool" "$@"; _arc=$?   # on-phone stand-ins (plutil, lipo, sips ...)
+    [ $_arc -ne 99 ] && exit $_arc
+    echo "$tool: command not found." >&2
+    echo "  Try: pkg search $tool    or    pkg install <package>   (genuine Termux packages)" >&2
+    exit 127
+  fi
+fi
 if [ "${MACOID_LINUX:-1}" = 0 ]; then
-  # no Linux engine: installing natively on first use is the only way left
-  if nat_ensure "$tool"; then nat_run "$PREFIX/bin/$tool" "$@"; exit $?; fi
   echo "$tool: command not found (the Linux engine is switched off: MACOID_LINUX=0)" >&2; exit 127
 fi
 . "$MACOID/lib/linux.sh"
-# 2) already inside Linux (installed there earlier) -> run it there
+# 1) already inside Linux -> run it there
 if lx_ready && lx_has "$tool"; then lx_run "$tool" "$@"; _rc=$?; lx_after "$tool" "$@"; exit $_rc; fi
-# 3) a command with a native package: install it from the native repo on first use (fast, no proot), then run it.
-#    Names the native repo does not have fall through to the local Linux below.
-if nat_ensure "$tool"; then nat_run "$PREFIX/bin/$tool" "$@"; exit $?; fi
-# 4) a command we know a Linux package for: install on first use in the local Linux, then run it
+# 2) a command we know a package for: install on first use (fast, on the phone), then run it
 if [ -n "$(lx_pkgs "$tool")" ]; then
   if lx_ensure "$tool"; then lx_run "$tool" "$@"; _rc=$?; lx_after "$tool" "$@"; exit $_rc; fi
   echo "$tool: could not be installed in the local Linux (see the error above). Check your internet, then run it again; 'pkg doctor' shows the state." >&2
   exit 127
 fi
-# 5) Apple tools that have an on-phone replacement (plutil, lipo, sips ...)
+# 3) Apple tools that have an on-phone replacement (plutil, lipo, sips ...)
 . "$MACOID/lib/apple.sh"
 apple_dispatch "$tool" "$@"; _arc=$?
 [ $_arc -ne 99 ] && exit $_arc

@@ -1,9 +1,8 @@
 # Macoid init (sourced by the app's shell at startup)
-export MACOID_VERSION=4.2
+export MACOID_VERSION=4.3
 # On PATH: your scripts, then Android's own tools, then launchers for everything installed in the real Linux on the phone
 # ($MACOID/linux/wrap) and for skill commands (~/.macoid/xbin). New installs show up here at once, no restart needed.
-# $HOME/.local/bin = pip --user / pipx / scripts, $HOME/.cargo/bin = cargo install, $HOME/go/bin = go install (same places as on Termux)
-export PATH="$HOME/.local/bin:$HOME/.cargo/bin:$HOME/go/bin:$PATH:$MACOID/linux/wrap:$HOME/.macoid/xbin"
+export PATH="$HOME/.local/bin:$PATH:$MACOID/linux/wrap:$HOME/.macoid/xbin"
 mkdir -p "$HOME/.local/bin" "$HOME/.Trash" "$HOME/.macoid/xbin" 2>/dev/null
 # one-time upgrade from 3.2: build the launchers for what is already installed
 [ -f "$MACOID/linux/bins" ] && [ ! -d "$MACOID/linux/wrap" ] && ( . "$MACOID/lib/linux.sh" && lx_sync_bins ) >/dev/null 2>&1

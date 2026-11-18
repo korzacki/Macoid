@@ -6,6 +6,10 @@ install or run - `python`, `pip`, `node`, `gcc`, `ffmpeg`, `apt`, ... - runs in 
 `xcrun`, `codesign`, `simctl` ...) run on a GitHub runner - everything else stays on the phone.**
 Info: Unpack workflow is for unpacking zip file that contains in the code, so if you modified some of the code. and you just too lazy to unpack it, run that workflow.
 
+> **4.3: real packages.** `pkg`, `apt`, `dpkg` and `pip` are the genuine Termux tools, downloaded from the official sources
+> (packages.termux.dev, github.com/termux/termux-packages, pypi.org). For that the app id is `com.termux`: uninstall the real Termux and any
+> older Macoid before installing this APK. The Alpine/proot text below describes the old fallback (`MACOID_DISTRO=alpine`).
+
 ## Build the app
 1. Push this folder to a GitHub repository or fork it (i'll give access).
 2. **Actions -> Build APK** -> download the `Macoid-apk` artifact (`app-debug.apk`) and install it

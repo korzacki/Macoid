@@ -2,7 +2,7 @@
 # Sourced by pkg, shim.sh and brew. Needs $MACOID (set by the app); $PREFIX is set by the app too (files/usr).
 . "$MACOID/lib/common.sh"
 [ -n "$PREFIX" ] || PREFIX="$(dirname "$MACOID")/usr"
-NAT_BASE_URL=""
+NAT_BASE_URL=""; NAT_MODE=termux
 [ -f "$MACOID/lib/native.conf" ] && . "$MACOID/lib/native.conf"
 [ -f "$HOME/.macoid/native.conf" ] && . "$HOME/.macoid/native.conf"
 [ -n "$MACOID_REPO" ] && NAT_BASE_URL=$MACOID_REPO
@@ -20,7 +20,7 @@ nat_arch() {
 }
 nat_ready() { [ -x "$PREFIX/bin/apt" ] && [ -x "$PREFIX/bin/dpkg" ]; }
 # wanted = switched on and either installed already or a repo is configured
-nat_wanted() { [ "${MACOID_NATIVE:-1}" != 0 ] && { nat_ready || [ -n "$NAT_BASE_URL" ]; }; }
+nat_wanted() { [ "${MACOID_NATIVE:-1}" != 0 ] && { nat_ready || [ "$NAT_MODE" = termux ] || [ -n "$NAT_BASE_URL" ]; }; }
 
 # nat_run <cmd> [args]: run a command with the native environment (apt/dpkg need the prefix on PATH and termux-exec preloaded)
 nat_run() {
@@ -33,45 +33,57 @@ nat_run() {
   fi
 }
 
-# Point apt at Macoid's repo. The Termux bootstrap ships sources for com.termux, which do not fit this app's prefix.
-# Idempotent: does nothing when no repo is configured or sources.list already says the right thing.
-nat_apply_repo() {
-  [ -n "$NAT_BASE_URL" ] || return 0
-  _want="deb [trusted=yes] $NAT_BASE_URL/apt stable main"
-  [ "$(head -1 "$PREFIX/etc/apt/sources.list" 2>/dev/null)" = "$_want" ] && return 0
-  mkdir -p "$PREFIX/etc/apt/sources.list.d"
-  rm -f "$PREFIX"/etc/apt/sources.list.d/* 2>/dev/null
-  echo "$_want" > "$PREFIX/etc/apt/sources.list"
-  rm -f "$NAT_STAMP"   # new source = the index must be refreshed
+# nat_find_bootstrap <arch>: prints "<zip-url> <sha256>" of the newest official Termux bootstrap (apt.android-7 flavour,
+# i.e. the one for apps that run from /data/data/... with apt). The sha256 is GitHub's own digest of the release asset.
+nat_find_bootstrap() {
+  _want="bootstrap-$1.zip"
+  _json=$(/system/bin/sh "$MACOID/bin/wget" -q -O - "$NAT_RELEASES_API" 2>/dev/null) || return 1
+  printf '%s\n' "$_json" | {
+    _tag=""; _hit=0; _sha=""; _kt='"tag_name": "'; _kd='"digest": "sha256:'; _ku='"browser_download_url": "'
+    while IFS= read -r _l; do
+      case "$_l" in
+        *"$_kt"*) _tag=${_l#*"$_kt"}; _tag=${_tag%%\"*}; _hit=0; _sha="";;
+        *'"name": "'"$_want"'"'*) case "$_tag" in bootstrap-*apt*android-7*) _hit=1;; esac;;
+        *"$_kd"*) [ "$_hit" = 1 ] && { _sha=${_l#*"$_kd"}; _sha=${_sha%%\"*}; };;
+        *"$_ku"*"/$_want\""*) if [ "$_hit" = 1 ]; then _u=${_l#*"$_ku"}; _u=${_u%%\"*}; echo "$_u $_sha"; exit 0; fi;;
+      esac
+    done
+    exit 1
+  }
 }
 
-# Second-stage script of the bootstrap (dpkg configure). Termux 0.118.x and newer bootstraps keep it in different places.
-nat_second_stage_file() {
-  for _f in "$PREFIX/etc/termux/bootstrap/termux-bootstrap-second-stage.sh" \
-            "$PREFIX/etc/termux/termux-bootstrap/second-stage/termux-bootstrap-second-stage.sh"; do
-    [ -f "$_f" ] && { echo "$_f"; return 0; }
-  done
-  return 1
-}
-
-# One-time setup: unpack the bootstrap (one zip, bundled in the APK and installed at first launch, or downloaded here
-# when none is bundled), point apt at the repo, refresh the index.
+# One-time setup: download + unpack the bootstrap (one zip), point apt at the repo, refresh the index.
 nat_setup() {
-  # already installed (first-launch install from the APK, or an earlier run): only make sure apt uses our repo
-  if nat_ready; then nat_apply_repo; return 0; fi
-  [ -n "$NAT_BASE_URL" ] || { echo "macoid: no native repo configured (NAT_BASE_URL in lib/native.conf)" >&2; return 1; }
+  nat_ready && return 0
   _a=$(nat_arch) || { echo "macoid: this CPU ($(uname -m)) has no native bootstrap" >&2; return 1; }
-  echo "[macoid] first run: installing the native package system (one time only)..." >&2
-  _sum=$(/system/bin/sh "$MACOID/bin/wget" -q -O - "$NAT_BASE_URL/bootstrap-$_a.zip.sha256" 2>/dev/null | head -1 | cut -d' ' -f1)
-  [ "${#_sum}" -eq 64 ] || _sum=""
-  ( jvm bootstrap "$NAT_BASE_URL/bootstrap-$_a.zip" "$PREFIX" "$_sum" ) || { echo "macoid: bootstrap failed - nothing was changed" >&2; return 1; }
+  if [ "$NAT_MODE" = termux ]; then
+    if [ -n "$NAT_BOOTSTRAP_URL" ]; then _bu=$NAT_BOOTSTRAP_URL; _sum=$NAT_BOOTSTRAP_SHA256
+    else
+      echo "[macoid] looking for the newest official Termux bootstrap on GitHub..." >&2
+      _r=$(nat_find_bootstrap "$_a") || { echo "macoid: could not find an official bootstrap (no internet, or GitHub is rate-limiting; try again later)" >&2; return 1; }
+      _bu=${_r%% *}; _sum=${_r#* }; [ "$_sum" = "$_r" ] && _sum=""
+    fi
+    echo "[macoid] bootstrap: $_bu" >&2
+  else
+    [ -n "$NAT_BASE_URL" ] || { echo "macoid: no native repo configured (NAT_BASE_URL in lib/native.conf)" >&2; return 1; }
+    _bu="$NAT_BASE_URL/bootstrap-$_a.zip"
+    _sum=$(/system/bin/sh "$MACOID/bin/wget" -q -O - "$_bu.sha256" 2>/dev/null | head -1 | cut -d' ' -f1)
+  fi
+  [ "${#_sum}" -eq 64 ] || { _sum=""; echo "[macoid] warning: no sha256 available for the bootstrap (HTTPS only)" >&2; }
+  echo "[macoid] first run: installing the real Termux package system (one time only)..." >&2
+  ( jvm bootstrap "$_bu" "$PREFIX" "$_sum" ) || { echo "macoid: bootstrap failed - nothing was changed" >&2; return 1; }
   # newer bootstraps ship a second stage (dpkg configure of the unpacked packages)
-  _ss=$(nat_second_stage_file)
-  if [ -n "$_ss" ]; then
+  _ss="$PREFIX/etc/termux/termux-bootstrap/second-stage/termux-bootstrap-second-stage.sh"
+  if [ -f "$_ss" ]; then
     _sh="$PREFIX/bin/bash"; [ -x "$_sh" ] || _sh="$PREFIX/bin/sh"
     nat_run "$_sh" "$_ss" >&2 || echo "macoid: second stage reported errors (continuing)" >&2
   fi
-  nat_apply_repo
+  if [ "$NAT_MODE" != termux ]; then
+    # custom repo only. In termux mode the bootstrap's own signed sources.list + keyring are kept untouched.
+    mkdir -p "$PREFIX/etc/apt/sources.list.d"
+    rm -f "$PREFIX"/etc/apt/sources.list.d/* 2>/dev/null
+    echo "deb [trusted=yes] $NAT_BASE_URL/apt stable main" > "$PREFIX/etc/apt/sources.list"
+  fi
   nat_ready || { echo "macoid: bootstrap unpacked but apt/dpkg are missing" >&2; return 1; }
   nat_update >/dev/null
   echo "[macoid] native packages ready." >&2
@@ -114,9 +126,9 @@ nat_name() {
 # so that unknown names never trigger an apt run)
 nat_for_tool() {
   case "$1" in
-    python|python3|python3.*|pip|pip3|node|nodejs|npm|npx|go|gofmt|cargo|rustc|gcc|g++|cc|c++|clang|clang++|make|cmake|perl|php|ruby|irb|gem|bundle|\
-    ssh|scp|sftp|ssh-keygen|rsync|tmux|htop|vim|nvim|emacs|ffmpeg|sqlite3|jq|rg|java|javac|xmllint|xsltproc|magick|awk|nano|yarn|pnpm|lua|\
-    pipx|uv|uvx|composer|luarocks|bc|file|gdb|strace|patch|xxd|pkg-config)
+    python|python3|python3.*) echo "python python-pip";;
+    pip|pip3|node|nodejs|npm|npx|go|gofmt|cargo|rustc|gcc|g++|cc|c++|clang|clang++|make|cmake|perl|php|ruby|irb|gem|bundle|\
+    ssh|scp|sftp|ssh-keygen|rsync|tmux|htop|vim|nvim|emacs|ffmpeg|sqlite3|jq|rg|java|javac|xmllint|xsltproc|magick|awk|nano|yarn|pnpm|lua)
       nat_name "$1";;
     *) echo "";;
   esac
@@ -147,5 +159,8 @@ nat_ensure() {
   _p=$(nat_for_tool "$1"); [ -n "$_p" ] || return 1
   nat_wanted || return 1
   echo "[macoid] installing $_p (native)..." >&2
-  nat_install "$_p" && [ -x "$PREFIX/bin/$1" ]
+  nat_install $_p && [ -x "$PREFIX/bin/$1" ]
 }
+
+# nat_exec <cmd> [args]: run a command from the native prefix (replaces the shell)
+nat_exec() { nat_run "$@"; exit $?; }

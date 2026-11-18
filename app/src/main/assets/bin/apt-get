@@ -1,3 +1,5 @@
 #!/system/bin/sh
-# apt - familiar verbs, handled by pkg (Alpine apk underneath)
+# apt-get - launcher for the genuine Termux apt-get ($PREFIX/bin/apt-get); sets up the official bootstrap on first use
+. "$MACOID/lib/native.sh"
+if nat_wanted; then nat_setup || exit 1; nat_run "$PREFIX/bin/apt-get" "$@"; exit $?; fi
 exec /system/bin/sh "$MACOID/bin/pkg" "$@"

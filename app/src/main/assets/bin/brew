@@ -1,83 +1,42 @@
 #!/system/bin/sh
-# brew - Homebrew-style front end. Formulae install as prebuilt native packages (Termux-style, straight on Android) when the
-# native repo has them, otherwise into the real Linux on the phone (no GitHub runner, no cloud).
+# brew - the GENUINE Homebrew (https://brew.sh), installed with Homebrew's own installer
+#   https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh
+# Homebrew has no Android support (it needs glibc and /home/linuxbrew/.linuxbrew, and refuses to run as root), so it runs as
+# Homebrew on Linux inside Macoid's real Debian (glibc, proot), as a normal user "linuxbrew". Nothing here reimplements brew:
+# every command below is passed straight to the real /home/linuxbrew/.linuxbrew/bin/brew.
 . "$MACOID/lib/common.sh"
+MACOID_DISTRO=debian; export MACOID_DISTRO
 . "$MACOID/lib/linux.sh"
-. "$MACOID/lib/native.sh"
-CAT="$MACOID/lib/maccmds.txt"; EXTRA="$MACOID/lib/maccmds.extra $MACOID/lib/maccmds.mac"
-names() { cat "$CAT" $EXTRA 2>/dev/null | grep -v '^#' | tr -s ' ' '\n' | grep -E '^[A-Za-z0-9_+.-]+$' | sort -u; }
-# local install: returns 0 = installed, 1 = no such package, 2 = real error (no internet, engine will not start ...)
-brew_local() {
-  _bn=${1%%@*}
-  # 1) native: a .deb from the native repo, unpacked by apt, no proot (same engine as 'pkg install')
-  if nat_wanted; then
-    nat_install "$_bn"; _nrc=$?
-    if [ -z "$NAT_MISS" ]; then
-      [ $_nrc -eq 0 ] || return 2
-      echo "==> $_bn: installed natively and saved on this phone. It is ready to use now." >&2; return 0
-    fi
-    echo "==> $_bn is not in the native repo, trying the local Linux" >&2
-  fi
-  # 2) local Linux (Debian/Alpine in proot)
-  _pk=$(lx_pkgs "$_bn"); [ -n "$_pk" ] || _pk=$_bn
-  lx_setup || return 2
-  echo "==> Installing $_bn ($LX_DISTRO)" >&2
-  if lx_pkg_add $_pk; then
-    echo "==> $_bn: installed and saved on this phone. It is ready to use now." >&2; return 0
-  fi
-  [ "$LX_APK_MISSING" = 1 ] && return 1
-  return 2
+[ "$LX_DISTRO" = debian ] || die "brew: Homebrew needs glibc; this needs the Debian Linux (pkg distro debian)"
+case "$(uname -m)" in aarch64|arm64|x86_64|amd64) ;; *) die "brew: Homebrew on Linux supports only 64-bit ARM and x86_64 (this CPU: $(uname -m))";; esac
+
+BREW_PREFIX=/home/linuxbrew/.linuxbrew
+# run a command inside the Debian as the normal user linuxbrew (uid 1000), not as root
+brew_user() {
+  LX_ID_FLAG="-i 1000:1000" LX_HOME=/home/linuxbrew LX_USER=linuxbrew LX_PATH_PRE="$BREW_PREFIX/bin:$BREW_PREFIX/sbin:" \
+    _lx_proot "$@"
 }
 
-case "$1" in
-  --version|-v) echo "Homebrew 4.2.0 (Macoid)"; echo "Homebrew/local: formulae install as native packages on this phone, local Linux ($LX_DISTRO) as fallback";;
-  list|ls) { ls "$MACOID/bin" "$HOME/.local/bin" 2>/dev/null | grep -v ':'; nat_ready && nat_run dpkg-query -W -f '${Package}\n' 2>/dev/null; lx_ready && lx_pkg_list 2>/dev/null | cut -d' ' -f1; } | sort -u;;
-  search) [ -z "$2" ] && die "usage: brew search <text>"; names | grep -i -- "$2"
-          nat_ready && nat_run apt-cache search "$2" 2>/dev/null | head -40
-          lx_ready && lx_pkg_search "$2" 2>/dev/null | head -40;;
-  info) [ -z "$2" ] && die "usage: brew info <name>"
-        if [ -f "$MACOID/bin/$2" ]; then echo "$2: built into Macoid (runs locally)"
-        elif nat_ready && nat_run dpkg -s "$(nat_name "$2")" >/dev/null 2>&1; then echo "$2: installed natively ($(nat_name "$2"))"
-        elif lx_ready && lx_has "$2"; then echo "$2: installed in the local Linux ($LX_DISTRO)"
-        elif [ -n "$(lx_pkgs "$2")" ]; then echo "$2: not installed yet; 'brew install $2' (or just run '$2') installs it: $(lx_pkgs "$2")"
-        else echo "$2: not a known command; try: brew search $2"; fi;;
-  install|reinstall)
-    shift; _brc=0
-    for p in "$@"; do case "$p" in -*) continue;; *) _any=1;; esac; done
-    [ -n "$_any" ] || die "usage: brew install <name | https://url/script.sh>"
-    for p in "$@"; do
-      case "$p" in
-        --cask|--casks) echo "brew: casks (GUI apps) are not supported on Android" >&2; _brc=1; break;;
-        -*) continue;;
-        http://*|https://*) n=$(basename "$p" | sed 's/\.sh$//'); mkdir -p "$HOME/.local/bin"
-          /system/bin/sh "$MACOID/bin/wget" -q -O "$HOME/.local/bin/$n" "$p" || { echo "brew: download failed" >&2; _brc=1; continue; }
-          chmod +x "$HOME/.local/bin/$n"; echo "==> Installed script '$n' (ready to use now)";;
-        *) if [ -f "$MACOID/bin/$p" ]; then echo "$p: already built into Macoid"; continue; fi
-           brew_local "$p"; _lr=$?
-           case $_lr in
-             0) ;;
-             2) echo "brew: could not install '$p' on the phone (see the error above). Nothing was saved." >&2
-                echo "     Check your internet, then try again. 'pkg doctor' shows the state of the local Linux." >&2; _brc=1;;
-             *) echo "brew: no package named '$p' in the $LX_DISTRO index (try: brew search $p)" >&2
-                case "$p" in xcodebuild|codesign|simctl|ibtool|actool|swift|swiftc|xcrun) echo "     '$p' is an Apple tool: nothing to install, just run '$p' (it runs on a GitHub runner; needs gh auth login)." >&2;; esac
-                _brc=1;;
-           esac;;
-      esac
-    done
-    exit $_brc;;
-  uninstall|remove) shift
-    for p in "$@"; do
-      if [ -f "$HOME/.local/bin/$p" ]; then rm -f "$HOME/.local/bin/$p"; echo "Uninstalled $p"
-      elif nat_ready && nat_run dpkg -s "$(nat_name "$p")" >/dev/null 2>&1; then
-        nat_run apt remove -y "$(nat_name "$p")" >&2 && echo "Uninstalled $p"
-      elif lx_ready; then
-        _pk=$(lx_pkgs "$p" | cut -d' ' -f1 | grep . || echo "$p")
-        if lx_pkg_installed "$_pk"; then lx_pkg_del "$_pk" >/dev/null && echo "Uninstalled $p"; else echo "Error: No such keg: $p" >&2; fi
-      else echo "Error: No such keg: $p" >&2; fi
-    done;;
-  update) if nat_ready; then nat_update && echo "Updated package index."; else echo "Your system is ready to brew."; fi;;
-  upgrade) if nat_ready; then nat_update >/dev/null; nat_run apt upgrade -y; else echo "Your system is ready to brew."; fi;;
-  cleanup|doctor) echo "Your system is ready to brew.";;
-  "") echo "usage: brew [--version|list|search|info|install|uninstall]";;
-  *) echo "brew: '$1' is not supported in Macoid" >&2; exit 1;;
-esac
+brew_setup() {
+  [ -f "$LXROOT/home/linuxbrew/.macoid-brew-ok" ] && return 0
+  lx_setup || return 1
+  echo "==> Homebrew: preparing the Debian Linux (build tools, git, curl)" >&2
+  lx_pkg_add build-essential procps curl file git ca-certificates || return 1
+  # normal user: Homebrew refuses to run as root
+  grep -q '^linuxbrew:' "$LXROOT/etc/passwd" 2>/dev/null || echo 'linuxbrew:x:1000:1000:Linuxbrew:/home/linuxbrew:/bin/bash' >> "$LXROOT/etc/passwd"
+  grep -q '^linuxbrew:' "$LXROOT/etc/group" 2>/dev/null || echo 'linuxbrew:x:1000:' >> "$LXROOT/etc/group"
+  mkdir -p "$LXROOT$BREW_PREFIX" "$LXROOT/home/linuxbrew"
+  _lx_proot chown -R 1000:1000 /home/linuxbrew || return 1
+  if [ ! -x "$LXROOT$BREW_PREFIX/bin/brew" ]; then
+    echo "==> Homebrew: running the official installer from github.com/Homebrew/install" >&2
+    brew_user env NONINTERACTIVE=1 CI=1 /bin/bash -c 'curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh -o /tmp/brew-install.sh && /bin/bash /tmp/brew-install.sh' || {
+      echo "brew: the official Homebrew installer failed (see above). Nothing else was changed." >&2; return 1; }
+  fi
+  [ -x "$LXROOT$BREW_PREFIX/bin/brew" ] || { echo "brew: installer finished but $BREW_PREFIX/bin/brew is missing" >&2; return 1; }
+  : > "$LXROOT/home/linuxbrew/.macoid-brew-ok"
+  echo "==> Homebrew is ready." >&2
+}
+
+brew_setup || exit 1
+cd "$HOME" 2>/dev/null
+brew_user "$BREW_PREFIX/bin/brew" "$@"

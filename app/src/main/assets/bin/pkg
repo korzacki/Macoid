@@ -1,8 +1,18 @@
 #!/system/bin/sh
-# pkg - the Macoid package installer. Installs run locally on the phone (Alpine Linux in proot): instant, no GitHub runner.
+# pkg - launcher for the GENUINE Termux package manager ($PREFIX/bin/pkg, apt, dpkg from packages.termux.dev).
+# This file only downloads the official bootstrap on first use and then hands over; it does not reimplement pkg.
+# (The Alpine/proot code below is the old fallback, used only with MACOID_NATIVE=0 or MACOID_DISTRO=alpine.)
 . "$MACOID/lib/linux.sh"
 . "$MACOID/lib/native.sh"
 sub=$1; [ $# -gt 0 ] && shift
+if nat_wanted && [ "${MACOID_DISTRO:-}" != alpine ]; then
+  case "$sub" in
+    doctor|shell|reset|setup) ;;   # Macoid-only verbs, handled below
+    *) nat_setup || exit 1
+       if [ -n "$sub" ]; then nat_run "$PREFIX/bin/pkg" "$sub" "$@"; else nat_run "$PREFIX/bin/pkg"; fi
+       exit $?;;
+  esac
+fi
 
 # keep only package names (drop apt-style flags), translate known command names to Alpine packages
 names() {
@@ -58,7 +68,8 @@ case "$sub" in
   doctor)
     if nat_ready; then
       echo "[ok] native packages (Termux-style): $(nat_run dpkg -l 2>/dev/null | grep -c '^ii') installed, prefix $PREFIX"
-      echo "     repo: $(cat "$PREFIX/etc/apt/sources.list" 2>/dev/null | head -1)"
+      echo "     repo: $(grep -h '^deb' "$PREFIX/etc/apt/sources.list" "$PREFIX"/etc/apt/sources.list.d/*.list 2>/dev/null | head -1)"
+      echo "     pkg:  $PREFIX/bin/pkg (genuine Termux), pip: $([ -x "$PREFIX/bin/pip" ] && "$PREFIX/bin/pip" --version 2>/dev/null | head -1 || echo 'not installed yet - run: pkg install python python-pip')"
     elif [ -n "$NAT_BASE_URL" ]; then echo "[--] native packages: not set up yet (first pkg install downloads the bootstrap), repo $NAT_BASE_URL"
     else echo "[--] native packages: off (no repo in lib/native.conf) - using Alpine fallback"; fi
     echo "cpu:     $(uname -m)  (engine arch: $(lx_arch 2>/dev/null | cut -d' ' -f1))"
@@ -71,7 +82,7 @@ case "$sub" in
     else echo "[--] Alpine not unpacked yet (pkg setup)"; fi;;
   help|""|-h|--help)
     cat <<'TXT'
-pkg - install software on the phone, instantly (prebuilt native packages like Termux; Alpine as fallback; no GitHub runner)
+pkg - the genuine Termux package manager (packages from packages.termux.dev; run "pkg help" again after the first install for the full original help)
 
   pkg install <name...>      install  (python node ruby go cargo gcc cmake ffmpeg jq ssh rsync tmux vim ...)
   pkg remove <name...>       remove

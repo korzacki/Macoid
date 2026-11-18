@@ -3,11 +3,11 @@ android {
     namespace = "com.macoid.terminal"
     compileSdk = 34
     defaultConfig {
-        applicationId = "com.macoid.terminal"
+        applicationId = "com.termux"   // MUST be com.termux: the official Termux packages/bootstrap are built for /data/data/com.termux/files/usr
         minSdk = 26          // JGit needs java.nio.file (API 26+)
         targetSdk = 28       // allows exec from the app data dir (like Termux)
-        versionCode = 10
-        versionName = "4.2"
+        versionCode = 11
+        versionName = "4.3"
     }
     // Fixed signing key. Without it every GitHub Actions build is signed with a random debug key, Android refuses to
     // update the installed app ("conflicts with an existing package"), and uninstalling wipes everything installed in Macoid.
@@ -27,8 +27,6 @@ android {
     compileOptions { sourceCompatibility = JavaVersion.VERSION_17; targetCompatibility = JavaVersion.VERSION_17 }
     kotlinOptions { jvmTarget = "17" }
     lint { abortOnError = false; checkReleaseBuilds = false }
-    // assets/bootstrap/*.zip (see tools/bundle-bootstrap.sh) are already compressed: store them as they are
-    androidResources { noCompress += "zip" }
     packaging {
         resources {
             excludes += listOf("META-INF/AL2.0", "META-INF/LGPL2.1", "META-INF/DEPENDENCIES",

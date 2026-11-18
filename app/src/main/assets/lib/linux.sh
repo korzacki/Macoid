@@ -238,12 +238,12 @@ _lx_proot() {
   if [ -f "$LX/safe" ]; then _lx_sys=""      # plain mode: no /sys bind, no fake kernel version
   elif [ "$LX_DISTRO" = debian ]; then _lx_extra="$_lx_extra -k 6.2.1-Macoid"     # glibc wants a believable kernel version
   fi
-  PROOT_TMP_DIR="$TMPDIR" "$LXPROOT" --link2symlink -0 --kill-on-exit -r "$LXROOT" \
+  PROOT_TMP_DIR="$TMPDIR" "$LXPROOT" --link2symlink ${LX_ID_FLAG:--0} --kill-on-exit -r "$LXROOT" \
     -b /dev -b /proc $_lx_sys -b "$HOME" $_lx_extra \
     -w "$PWD" \
-    /usr/bin/env -i HOME=/root USER=root LOGNAME=root SHELL=/bin/sh \
+    /usr/bin/env -i HOME=${LX_HOME:-/root} USER=${LX_USER:-root} LOGNAME=${LX_USER:-root} SHELL=/bin/sh \
       TERM="${TERM:-xterm-256color}" COLORTERM="${COLORTERM:-}" LANG=C.UTF-8 TMPDIR=/tmp \
-      PATH=/root/.local/bin:/root/.cargo/bin:/root/go/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin \
+      PATH=${LX_PATH_PRE:-}/root/.local/bin:/root/.cargo/bin:/root/go/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin \
       PIP_BREAK_SYSTEM_PACKAGES=1 PIP_DISABLE_PIP_VERSION_CHECK=1 PYTHONUNBUFFERED=1 DEBIAN_FRONTEND=noninteractive \
       MACOID_LINUX=1 \
       "$@"
