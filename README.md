@@ -1,8 +1,9 @@
-# Macoid 3.4 - a macOS-style terminal for Android (real PTY terminal, root-capable)
+# Macoid 4.1 - a macOS-style terminal for Android, with a real Linux inside
 
-Macoid gives you a Mac-like shell on Android: real `git`, a GitHub CLI (`gh`), macOS commands
-(`open`, `pbcopy`, `defaults`, `sw_vers`, `sysctl`, `osascript`, ...), and a way to run **any other macOS
-command, and to compile apps for any platform, on real GitHub Actions runners**.
+Macoid gives you a Mac-like shell on Android: real `git`, a GitHub CLI (`gh`), macOS commands (`open`, `pbcopy`, `defaults`,
+`sw_vers`, `sysctl`, `osascript`, ...) and a **real Linux (Debian by default) running locally on the phone**. Everything you
+install or run - `python`, `pip`, `node`, `gcc`, `ffmpeg`, `apt`, ... - runs in that Linux. **Only the Apple tools (`swift`, `xcodebuild`,
+`xcrun`, `codesign`, `simctl` ...) run on a GitHub runner - everything else stays on the phone.**
 Info: Unpack workflow is for unpacking zip file that contains in the code, so if you modified some of the code. and you just too lazy to unpack it, run that workflow.
 
 ## Build the app
@@ -10,21 +11,83 @@ Info: Unpack workflow is for unpacking zip file that contains in the code, so if
 2. **Actions -> Build APK** -> download the `Macoid-apk` artifact (`app-debug.apk`) and install it
    (allow installs from unknown sources). Or open the folder in Android Studio and run *Build > Build APK*.
 3. Every build is signed with the same key (`app/macoid.keystore`), so you can install a new APK **over** the old one and
-   keep everything you installed. (If the app on your phone came from a build older than 3.3, uninstall it once first.)
+   keep everything you installed.
+
+(That workflow compiles the Macoid app itself. At run time the app only calls GitHub Actions for the Apple tools, see below.)
 
 ## What runs where
 | Layer | What | Where it runs |
 |---|---|---|
 | Native | `git` (JGit), `gh`, `curl`, `wget`, `zip`, `unzip`, `host/dig/nslookup` | on your phone |
 | macOS emulation | `open pbcopy pbpaste say afplay osascript defaults sw_vers sysctl system_profiler scutil pmset ioreg vm_stat diskutil ifconfig networksetup launchctl mdfind mdls ditto trash tree md5 shasum uuidgen brew man softwareupdate xcode-select caffeinate` | on your phone (reads real Android data) |
-| macOS catalog | ~920 command names (`python3 node gcc clang swift xcodebuild make cmake cargo go ruby awk rsync plutil codesign ...`) | on a **real Mac** (GitHub `macos-latest`) via your account |
-| Sync | `macoid sync-commands` pulls the full list of commands from a real Mac (`/bin /sbin /usr/bin /usr/sbin /opt/homebrew/bin`) and adds them | one-time cloud job |
+| Real Linux | `python pip node npm gcc clang make cmake cargo go ruby ssh rsync tmux ffmpeg jq ...` and every package of the distro | on your phone, inside proot |
+| Apple stand-ins | `plutil PlistBuddy lipo otool install_name_tool dwarfdump sips` | on your phone (python / LLVM / ImageMagick in the Linux) |
+| Apple tools | `swift swiftc xcodebuild xcrun codesign simctl ibtool actool productbuild pkgbuild notarytool ...` | **GitHub runner** (Ubuntu for plain Swift, macOS for Xcode / Apple frameworks) |
 
-Cloud commands are transparent: type `python3 script.py` and Macoid uploads your current folder to a private
-scratch repo (`<you>/macoid-cloud`), runs it on a macOS runner, streams the output back, and copies any files the
-command created into your folder. Latency is roughly 20-90 seconds. Hardware/OS-specific commands
-(`csrutil`, `kextstat`, `tmutil`, `dscl`, ...) are refused instead of reporting the runner's machine.
-Disable the cloud with `export MACOID_CLOUD=0`; choose another OS with `export MACOID_CLOUD_OS=ubuntu`.
+## The Linux (`lx`, `pkg`)
+```
+lx                       # a shell in the real Linux (bash, apt, python, pip, git already there)
+lx <cmd> ...             # run one command there
+pkg install python ffmpeg jq     # or: apt install ... / brew install ...
+pip install requests     # local pip;   also npm / yarn / pnpm / gem / cargo / go
+pkg doctor               # status
+```
+* First use downloads the proot engine (~1 MB) and the root filesystem (Debian ~30 MB), unpacks it and installs the **base set**:
+  `python3 pip venv git curl wget ca-certificates openssh-client` (`MACOID_LX_BASE=none` skips it, `MACOID_LX_BASE="a b c"` replaces it;
+  `pkg setup` retries it). `python`, `python3`, `pip`, `pip3`, `git`, `curl`, `ssh` work right away afterwards.
+* Known commands install themselves on first use (`gcc`, `node`, `cargo`, `go`, `ffmpeg`, `tmux` ...). Other packages: `pkg install <name>`.
+* Inside the Linux shell `pkg install / remove / search / update` works too (same verbs).
+* Installed commands are on `PATH` at once (launchers in `$MACOID/linux/wrap`), also in scripts and pipes.
+* Everything lives in the app's private storage (`$MACOID/linux`) and survives restarts and updates signed with the same key.
+
+### Distros
+| `pkg distro ...` | what | package manager |
+|---|---|---|
+| `debian` (default) | Debian 13 "trixie", glibc: normal pip wheels, normal binaries | `apt` |
+| `alpine` | Alpine, musl, very small (installs made by Macoid 3.x stay Alpine) | `apk` |
+
+Each distro keeps its own files; switching does not delete the other. Override for one command: `MACOID_DISTRO=alpine pkg install jq`.
+
+### Architectures (`pkg arch ...`)
+The Linux uses **the phone's own CPU**, picked automatically:
+
+| phone | Linux arch |
+|---|---|
+| arm64 / aarch64 (nearly every phone) | `arm64` |
+| 32-bit ARM (armv7 / armv8l userland) | `arm` |
+| x86_64 (emulators, Chromebooks) | `x86_64` |
+
+There is **no "arm128"**: no such CPU architecture exists. `pkg arch arm64|arm|x86_64|default` picks another one; a different
+architecture than the phone's runs through qemu-user, which you must provide yourself as a static binary at
+`$MACOID/linux/qemu/qemu-<arch>` (experimental, not included).
+
+## Build projects
+```
+cd myproject
+macoid build               # auto-detects the project type, builds ON THE PHONE
+macoid build python --entry app.py
+```
+Targets: `node python go rust cmake maven gradle-java`. Results land in `./build-output`.
+Apple targets build on a GitHub runner: `macoid build swift` (Ubuntu, or macOS when the code imports SwiftUI/UIKit/AppKit ...), `swift-mac`,
+`ios` (unsigned `.ipa`, `--scheme name` to pick the scheme), `macos` (`.app`).
+Not possible (need Android SDK / .NET / Flutter / Electron): `android-apk android-aab flutter-apk electron dotnet`.
+
+## Apple tools on a GitHub runner
+```
+gh auth login                       # once; token scopes: repo + workflow
+cd MyApp && xcodebuild -scheme MyApp -sdk iphonesimulator build
+swift build                         # swift / swiftc / swift run|test|package, xcrun, codesign, simctl ...
+```
+* Only the Apple tools go to a runner. The current folder is zipped and pushed as a throw-away branch of a private repo
+  `<you>/macoid-cloud` (created on first use); the push starts the workflow, the log and every new/changed file come back
+  into the current folder, then the branch and the run are deleted. Paths in arguments are relative to the current folder.
+* `swift*` runs on Ubuntu (cheap, boots in seconds) and is repeated on macOS automatically when the code needs an Apple framework.
+  `MACOID_SWIFT=ubuntu|macos` forces one, `MACOID_SWIFT=local` uses a Swift toolchain installed in the phone's Linux.
+* `MACOID_XCODE=16.2` picks the Xcode version, `MACOID_MAC_RUNNER=macos-15` the runner image, `MACOID_MAC_RETURN=all|none` what comes back
+  (default: new/changed files without `.build`, `DerivedData`, `Pods`), `MACOID_MAC_EXCLUDE="dir1 dir2"` leaves folders out of the upload (limit ~95 MB),
+  `MACOID_MAC_ENV="VAR1 VAR2"` forwards environment variables, `MACOID_XCODEBUILD_RAW=1` stops Macoid adding `-quiet`.
+* SwiftPM / CocoaPods downloads are cached between jobs, results and zips are never downloaded twice, and a dropped connection resumes.
+* macOS runner minutes count 10x on GitHub's free plan; Ubuntu runs count 1x.
 
 ## Getting started with GitHub
 ```
@@ -33,21 +96,8 @@ git clone you/project         # shorthand for https://github.com/you/project.git
 git add -A && git commit -m "change" && git push
 gh repo create myapp --private --source . --push
 gh pr create -t "My PR"
-gh api user -q .login
 ```
-Authentication is HTTPS + token only (no SSH).
-
-## Compile an app into anything
-```
-cd myproject
-macoid build                  # auto-detects the project type
-macoid build ios --scheme MyApp
-macoid build android-apk
-macoid cloud --os windows -- dotnet --info
-```
-Targets: `android-apk android-aab ios macos swift flutter-apk gradle-java maven node electron python go rust cmake dotnet`.
-Results land in `./build-output` (iOS output is an **unsigned** .ipa for sideloading).
-Cost note: private repos get a monthly free Actions quota, and macOS minutes count 10x.
+Authentication is HTTPS + token only (no SSH). `git` and `gh` are only for working with your repositories; they do not run anything remotely.
 
 ## Skills
 Skills are installable packages: a folder with a `SKILL.md` (front matter: `name`, `description`, optional `run`),
@@ -61,67 +111,14 @@ skill list | info <name> | run <name> [args] | update | remove <name>
 skill new my-skill                      # scaffold your own, then: nano ~/.macoid/skills/my-skill/SKILL.md
 skill search backup                     # GitHub repos tagged with the topic "macoid-skill"
 ```
-Built-ins: `hello-cmd` (template), `repo-backup` (zip the current folder to ~/storage/Download), `apk-release`
-(cloud-build an Android project and copy the APK to ~/storage/Download). Publish a skill by pushing its folder to GitHub.
+Built-ins: `hello-cmd` (template), `repo-backup` (zip the current folder to ~/storage/Download).
 Macoid has no AI model on the phone, so a skill here is an installable command package, not a prompt.
-
-## Fast installer (3.1)
-Installs no longer go through a GitHub runner. `pkg`, `apk`, `apt`, `brew install`, `pip`, `npm`, `gem`, `cargo`, `go`
-run in a small Alpine Linux on the phone (proot), so they finish in seconds and stay installed.
-```
-pkg install python ffmpeg jq     # or: apk add ... / apt install ... / brew install ...
-pip install requests             # local pip, installs python on first use
-npm i -g typescript
-lx                               # a Linux shell;  lx <cmd> runs one command there
-pkg doctor                       # status;  pkg reset --yes wipes the local Linux
-```
-Installed commands work immediately (no shell restart): each one gets a launcher on `PATH`, like in Termux.
-Everything lives in the app's private storage (`$MACOID/linux`) and survives restarts and updates signed with the same key.
-The package index is cached and refreshed every 12 h, so a second install is mostly just the download of the package itself.
-Only tools that need a real Mac (xcodebuild, codesign, simctl ...) and `macoid build` still use GitHub Actions - see below.
-
-## Native packages, Termux-style (3.4)
-`pkg install` now works the way Termux does: packages are **compiled once, ahead of time** (that is the slow, hours-long part)
-and a phone only downloads a prebuilt `.deb` and unpacks it. Binaries run straight on Android - no proot, no GitHub runner.
-```
-pkg install python git clang   # first time: one bootstrap zip, then each install is seconds
-pkg search ripgrep | pkg list | pkg upgrade | pkg doctor
-```
-* Only packages the native repo does not have fall back to the old local Alpine (proot) route.
-* Installed commands are on `PATH` at once (`$PREFIX/bin`, `PREFIX=files/usr`).
-* **You must build the repo once** because Macoid's app id differs from Termux's, so Termux's own packages cannot be reused.
-  On GitHub: **Settings -> Pages -> Source: GitHub Actions**, then **Actions -> Build native package repo -> Run workflow**
-  (hours; it only runs when you start it, never on installs). When it ends, copy the URL from the run summary into
-  **Settings -> Secrets and variables -> Actions -> Variables -> `NAT_BASE_URL`**, then run **Build APK** - it writes the URL into the app.
-  Without GitHub: `./tools/build-repo.sh` on a Docker PC/VPS and host `dist/` yourself.
-  Limits: 6 h per job, Pages 1 GB (default set fits; `full` may not), and a public repo is advised (private repos have a small free-minutes quota).
-* `MACOID_NATIVE=0` turns it off; `pkg reset --native --yes` deletes the native packages.
-
-## Apple tools, fast (3.2)
-Real Xcode cannot run on a phone, so Macoid replaces what can be replaced and picks the cheapest runner for the rest.
-| Tool | Where it runs now | Speed |
-|---|---|---|
-| `plutil`, `PlistBuddy` | on the phone (Python `plistlib` in the local Linux) | instant |
-| `lipo`, `otool`, `install_name_tool`, `dwarfdump` | on the phone (LLVM tools) | instant |
-| `sips` | on the phone (ImageMagick; resize, rotate, flip, crop, format, `-g`) | instant |
-| `xmllint`, `xsltproc` | on the phone (Alpine packages) | instant |
-| `swift`, `swiftc`, `swift build/run/test/package` | **Linux runner** (`ubuntu-latest`, Swift preinstalled) | seconds to boot, 1x minutes |
-| same, but the code imports SwiftUI / UIKit / AppKit / Combine / ... | real Mac (`macos-latest`) | slower, 10x minutes |
-| `xcodebuild`, `codesign`, `simctl`, `ibtool`, `actool` ... | real Mac | slower |
-`swift` looks at your `.swift` files: if none imports an Apple-only framework it uses the Linux runner, and if that run
-fails with `no such module 'UIKit'` (or similar) it repeats the command on a real Mac by itself.
-`MACOID_SWIFT=ubuntu|macos` forces one. `xcrun <tool>` goes through the same routing (`xcrun --sdk ...` needs a Mac).
-`xcodebuild build|test|archive` gets `-quiet COMPILER_INDEX_STORE_ENABLE=NO` (shorter log, no code index); set
-`MACOID_XCODEBUILD_RAW=1` to send your arguments untouched. `macoid build swift` also picks the Linux runner when it can.
-Honest limit: there is no way to build an iOS/macOS app (`xcodebuild`, `macoid build ios`) without a real Mac. Binaries
-that Swift produces on Linux are Linux programs, so use `swift file.swift` / `swift run` to run code (output streams back).
 
 ## Root
 Macoid cannot root a phone - it uses `su` on a phone that is **already rooted** (Magisk, KernelSU, APatch ...).
 * `#` button: new root session (approve the su prompt). `tsu`: root shell from a normal tab. `sudo <cmd>`: one command as root.
 * `macoid root status` tests su; `macoid root fixperms` hands the app folder back to the app user after root work.
 * `edit <file>` opens root-only files too (saves through su).
-* pbcopy/pbpaste/notify from inside a root shell are not supported (they talk to the app through its own home folder).
 
 ## Editing & storage
 * `nano|vi|vim|edit <file>` opens a built-in editor screen.
@@ -129,74 +126,9 @@ Macoid cannot root a phone - it uses `su` on a phone that is **already rooted** 
 * Tab completes file names (shell-native), Ctrl-C works like a normal terminal, arrow keys/history work.
 
 ## Limits (honest list)
-* Cloud jobs no longer send `.build` back to the phone (it is large and Linux/macOS binaries do not run on Android).
-* This is an emulation layer on Android's shell - not macOS. Binaries for Darwin cannot run on the phone; they run in the cloud.
-* The terminal is real, but Android ships no vim/nano/less/python: those names are an editor screen, `cat`, or cloud commands.
-  Termux packages cannot be installed (they are built for another prefix) - use `pkg install` instead (Alpine packages, local).
-  Pipelines into *cloud* commands are not supported (local Linux commands accept pipes).
-* No GUI apps. SSH works after `pkg install openssh-client` (or just run `ssh`).
-* The Kotlin sources for git/gh were written without access to an Android SDK/JGit in the authoring environment; the first
-  GitHub Actions build is the compile check.
-
-  # Changelog
-
-All notable changes to Macoid are documented here.
-
-## [2.1] - 2026-11-17
-
-### Fixed
-- **Installs no longer vanish.** Every cloud command runs on a fresh, empty GitHub runner, so anything you
-  installed (`pip install`, `npm i -g`, ...) was lost as soon as the job ended and had to be redone. Successful
-  installs are now remembered and re-applied automatically before later commands that need them.
-- **Aliases are now saved.** Aliases created with `alias` used to disappear when the shell restarted (`^C`) or the
-  app was closed. They are now stored and restored on startup.
-- **Misleading "not installed" message.** Running a cloud command used to print
-  "'swift' is not installed on Android". It now says the command is running on a real Mac.
-- `brew install <name>` for a macOS command that already exists on the cloud Mac (e.g. `swift`) used to print
-  "nothing to install" and record nothing. It now marks the tool as installed.
-
-### Added
-- **Saved installs** for `pip`/`pip3`/`pipx`, `npm`/`pnpm -g`, `yarn global add`, `gem`, `cargo install`,
-  `go install` and `brew install`. Only the installs relevant to a command are re-applied
-  (`python3` restores pip packages, `node` restores npm packages, and so on).
-- **New commands from installs are detected.** If an install adds a command (e.g. `pip install yt-dlp` adds
-  `yt-dlp`), it gets a local alias that runs on the cloud. Press `^C` once to load it.
-- `brew install <formula>` for names outside the built-in catalog now installs on the cloud Mac and is saved.
-- `pip uninstall`, `npm uninstall -g`, `gem uninstall`, `cargo uninstall` and `brew uninstall` remove the saved entry.
-- `macoid installs` lists saved installs; `macoid installs rm <package>` and `macoid installs clear` manage them.
-- `brew list` and `brew info` show tools marked as installed.
-- `~/.macoid/aliases.rc` (written automatically by `alias`, edited by `unalias`) and `~/.macoid/user.rc`
-  (free-form startup file you can edit yourself). Your aliases override the built-in ones.
-- `node_modules` is now uploaded with the project when it is under 30 MB, so a plain `npm install` is not lost
-  between runs.
-
-### Changed
-- Cloud jobs set `PIP_BREAK_SYSTEM_PACKAGES`, `PIP_DISABLE_PIP_VERSION_CHECK` and Homebrew's no-auto-update /
-  no-cleanup flags to keep installs working and faster.
-
-### Known limitations
-- The runner is still wiped after every job, so saved packages are re-installed in the cloud each time they are
-  needed. Results persist; the wait for those installs does not go away.
-- Newly installed commands need a shell restart (`^C`) before they can be used.
-
-## [2.0] - Initial release
-
-### Added
-- macOS-style terminal for Android with real `git` (JGit) and a GitHub CLI (`gh`).
-- Native commands: `git`, `gh`, `curl`, `wget`, `zip`, `unzip`, `host`/`dig`/`nslookup`.
-- macOS emulation on the phone: `open`, `pbcopy`, `pbpaste`, `say`, `afplay`, `osascript`, `defaults`,
-  `sw_vers`, `sysctl`, `system_profiler`, `scutil`, `pmset`, `ioreg`, `vm_stat`, `diskutil`, `ifconfig`,
-  `networksetup`, `launchctl`, `mdfind`, `mdls`, `ditto`, `trash`, `tree`, `md5`, `shasum`, `uuidgen`, `brew`,
-  `man`, `softwareupdate`, `xcode-select`, `caffeinate`.
-- macOS command catalog (~920 names, e.g. `python3`, `node`, `gcc`, `clang`, `swift`, `xcodebuild`, `make`,
-  `cmake`, `cargo`, `go`, `ruby`, `awk`, `rsync`, `plutil`, `codesign`) that runs transparently on a real
-  `macos-latest` GitHub Actions runner through your own account, with output streamed back and newly created files
-  copied into your folder.
-- `macoid sync-commands` to pull the full command list from a real Mac.
-- Hardware/OS-specific commands (`csrutil`, `kextstat`, `tmutil`, `dscl`, ...) are refused instead of reporting
-  the runner's machine.
-- `macoid build [target]` to compile projects on GitHub Actions (Android APK/AAB, iOS, macOS, Swift, Flutter,
-  Gradle, Maven, Node, Electron, Python, Go, Rust, CMake, .NET).
-- `MACOID_CLOUD=0` to disable the cloud and `MACOID_CLOUD_OS=ubuntu` to choose another runner OS.
-- GitHub authentication over HTTPS with a token (no SSH).
-
+* The Linux runs in **proot**, not as a real kernel: no `systemd`, no Docker, no mounting, no raw network tools needing real root,
+  and syscall-heavy programs are slower than native. `/proc` is the phone's own.
+* Darwin (macOS) binaries cannot run on the phone; `xcodebuild`, `codesign`, `simctl` and iOS/macOS builds run on a GitHub runner (see above) and need internet + a GitHub login.
+* No GUI apps. SSH works (`ssh` installs on first use).
+* This was written without being run on a phone: the Linux engine was smoke-tested on a PC (Debian 13 x86_64 + proot), the app
+  itself and the Android side (proot on your CPU/ROM, seccomp) still have to be tried on your device. `pkg doctor` / `macoid doctor` show the state.

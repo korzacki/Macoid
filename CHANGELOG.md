@@ -2,7 +2,54 @@
 
 All notable changes to Macoid are documented here.
 
-## [Unreleased]
+## [4.1] - 2026-11-18
+
+### Added
+- **Apple tools on a GitHub runner again - and only those.** `swift`, `swiftc`, `swift build|run|test|package`, `swift-format`,
+  `xcodebuild`, `xcrun`, `codesign`, `simctl`, `ibtool`, `actool`, `momc`, `mapc`, `iconutil`, `productbuild`, `productsign`, `pkgbuild`,
+  `notarytool`, `altool`, `stapler`, `xctrace`, `instruments`, `xcresulttool`, `xcstringstool`, `security` run on a runner
+  (`lib/mac.sh`, workflow `lib/apple-job/apple.yml`). Everything else (pkg, pip, python, gcc, git ...) still runs on the phone.
+  Swift goes to Ubuntu and is repeated on macOS when the code imports an Apple framework (`MACOID_SWIFT=ubuntu|macos|local`).
+- `macoid build swift|swift-mac|ios|macos` build on a runner (`ios` = unsigned `.ipa`, `macos` = `.app`, `--scheme` picks the scheme).
+- `gh run wait <id>` (waits without dumping the log), `gh run download --force`.
+- `zip -x pattern` and `zip -q`; `zip -r out.zip .` no longer prefixes every entry with `./`.
+
+### Fixed
+- **Download errors.** Downloads (artifacts, `wget`, the Linux engine and root filesystem) are written to `<file>.part`, retried up to 5 times,
+  **resumed** from where the connection dropped (HTTP Range), checked against Content-Length and renamed only when complete.
+  gzip transfer encoding is switched off for downloads (it broke length checks), GET requests to the GitHub API retry on network errors / 5xx,
+  expired artifacts and damaged zips give a clear message.
+- **Downloading again what is already there.** `gh run download` skips an artifact that is already unpacked (same id and size; `--force` overrides),
+  keeps the zip until it unpacked cleanly, and lists up to 100 artifacts. The Linux root filesystem download is kept until it has unpacked, so a failed
+  unpack or a restart reuses it instead of downloading ~30 MB again; a half-finished file continues. SwiftPM / CocoaPods packages are cached between runner jobs.
+
+### Changed
+- Apple tools no longer try the phone's Linux first (`MACOID_SWIFT=local` brings that back); `xcode-select --install`, `brew`, `macoid help` describe the runner.
+
+## [4.0] - 2026-11-18
+
+### Changed
+- **No more GitHub runners, no cloud, at all.** `macoid cloud`, `macoid sync-commands`, `macoid installs`, the cloud install cache,
+  the runner scratch repo (`<you>/macoid-cloud`) and the workflow templates are removed. Commands that used to fall back to a
+  macOS runner now run in the Linux on the phone or say plainly that they need a real Mac.
+- **A real Linux on the phone.** Debian 13 (glibc, apt) is the new default, Alpine stays available (`pkg distro alpine`);
+  installs made by 3.x stay Alpine. Architectures: arm64, arm (armv7) and x86_64, chosen from the phone's CPU (`pkg arch`).
+  There is no "arm128" architecture.
+- **Python, pip, git, curl and ssh are there from the start**: the first setup installs a base set, so `python`, `python3`,
+  `pip`, `pip3`, `git`, `curl` work right away. `pkg` also works inside the Linux shell (`lx`).
+- `pkg`, `apt`, `apt-get`, `brew install`, `pip`, `npm`, `gem`, `cargo`, `go` all use that Linux. REPLs (`python`, `node`, ...) work now.
+- `macoid build` compiles on the phone: `node python go rust cmake maven gradle-java`.
+- The Termux-style native package repo (needed hours of building on a runner or Docker PC) and `tools/build-repo.sh` are removed.
+- The `apk-release` skill is removed (it built Android apps on a runner).
+- App update removes the files older versions left behind (cloud scripts, templates).
+
+### Fixed
+- `apt update` that failed on every mirror (no internet) no longer counts as a fresh package index.
+
+### Not possible any more / not possible on the phone
+- `xcodebuild`, `codesign`, `simctl`, `ibtool`, `actool`, iOS/macOS builds, Android APK/AAB builds, Flutter, Electron, .NET builds.
+
+## [Unreleased - 3.x look]
 
 ### Changed
 - **New look.** Deep graphite gradient backdrop; floating rounded tab bar with pill-shaped session chips (blue = normal,
